@@ -1,0 +1,17 @@
+# Tap testing: ADXL345 + Raspberry Pi
+# Use a venv and Python 3.8+ on the Pi.
+
+# CircuitPython on Raspberry Pi (I2C/SPI)
+adafruit-blinka>=8.0.0
+
+# ADXL345 driver (PyPI uses 1.x versioning; pulls in adafruit-circuitpython-busdevice)
+adafruit-circuitpython-adxl34x>=1.12.0
+
+# Data handling and optional analysis
+numpy>=1.20.0
+
+# Chart (RPM band visualization)
+matplotlib>=3.5.0
+
+# Optional on Raspberry Pi only: status LED for run_cycle (pip install RPi.GPIO on Pi)
+# RPi.GPIO>=0.7.0
