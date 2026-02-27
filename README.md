@@ -12,6 +12,8 @@ Tap testing application for measuring tool vibrations using an accelerometer mou
 
 - **Raspberry Pi** (3B+, 4, or 5)
 - **ADXL345** (±2g / ±4g / ±8g, I2C or SPI)
+
+![ADXL345 tool mounts](images/adxl345-tool-mounts.png)
 - Wiring (I2C example):
   - ADXL345 `VCC` → 3.3 V
   - ADXL345 `GND` → GND
