@@ -34,6 +34,9 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Project
+example_output/
+
 # Local / secrets
 .env
 .env.local
