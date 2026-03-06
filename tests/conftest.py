@@ -104,3 +104,36 @@ def two_tap_csvs(tmp_path, sample_rate_hz):
     write_one(p1, 0.0, n)
     write_one(p2, 0.0, n)  # same t start; combine will offset
     return [p1, p2]
+
+
+# Default number of impact cycles for multi-tap tests (match run_cycle default).
+MULTI_TAP_CYCLE_ITERATIONS = 3
+
+
+@pytest.fixture
+def three_tap_csvs(tmp_path, sample_rate_hz):
+    """
+    Three tap CSVs (one per impact cycle) with same nominal frequency for testing
+    combine + analyze workflow. We use multiple impact cycles so analysis is not
+    based on a single dataset; combined data is used for natural frequency and RPM guidance.
+    """
+    def write_one(path, t0, n, freq_hz=100.0):
+        t = t0 + np.arange(n) / sample_rate_hz
+        ax = np.sin(2 * np.pi * freq_hz * t) + 0.05 * np.random.randn(n)
+        ay = 0.05 * np.random.randn(n)
+        az = 0.05 * np.random.randn(n)
+        with path.open("w", newline="") as f:
+            import csv
+            w = csv.writer(f)
+            w.writerow(("t_s", "ax_g", "ay_g", "az_g"))
+            w.writerow(("# sample_rate_hz", sample_rate_hz, "", ""))
+            for i in range(n):
+                w.writerow((t[i], ax[i], ay[i], az[i]))
+
+    n = 200
+    paths = []
+    for i in range(1, MULTI_TAP_CYCLE_ITERATIONS + 1):
+        p = tmp_path / f"tap_{i}.csv"
+        write_one(p, 0.0, n)
+        paths.append(p)
+    return paths

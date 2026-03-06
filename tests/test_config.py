@@ -1,5 +1,5 @@
 """
-Tests for tap_testing.config defaults.
+Tests for tap_testing.config defaults and env overrides.
 """
 import pytest
 
@@ -31,3 +31,31 @@ class TestGetConfig:
     def test_default_status_led_gpio(self):
         cfg = get_config()
         assert cfg.status_led_gpio == 17
+
+    def test_default_spi_first_byte_data(self):
+        cfg = get_config()
+        assert cfg.spi_first_byte_data is False
+
+    def test_default_spi_bus_and_device(self):
+        cfg = get_config()
+        assert cfg.spi_bus == 0
+        assert cfg.spi_device == 0
+
+
+class TestGetConfigEnvOverrides:
+    """Env overrides (TAP_*) are read at get_config() time; use monkeypatch to avoid leaking."""
+
+    def test_spi_first_byte_data_from_env(self, monkeypatch):
+        monkeypatch.setenv("TAP_SPI_FIRST_BYTE_DATA", "1")
+        cfg = get_config()
+        assert cfg.spi_first_byte_data is True
+
+    def test_spi_first_byte_data_env_true(self, monkeypatch):
+        monkeypatch.setenv("TAP_SPI_FIRST_BYTE_DATA", "true")
+        cfg = get_config()
+        assert cfg.spi_first_byte_data is True
+
+    def test_spi_first_byte_data_env_empty_stays_false(self, monkeypatch):
+        monkeypatch.setenv("TAP_SPI_FIRST_BYTE_DATA", "")
+        cfg = get_config()
+        assert cfg.spi_first_byte_data is False

@@ -10,17 +10,23 @@ from tap_testing.analyze import (
     DEFAULT_MAX_RPM,
     DEFAULT_MIN_RPM,
     TapTestResult,
+    ToolingConfiguration,
     analyze_tap,
     analyze_tap_data,
+    compute_sdof_interpretation,
     dominant_frequency,
     feed_rate_mm_min,
+    format_milling_guidance_for_cycle,
     get_rpm_zones,
     load_tap_csv,
     plot_cycle_result_figure,
+    plot_milling_dynamics_figure,
     plot_result_figure,
+    plot_tooling_configurations_figure,
     rpm_to_avoid,
     suggested_rpm_range,
 )
+from tap_testing.run_cycle import _combine_tap_csvs
 
 
 class TestLoadTapCsv:
@@ -87,6 +93,166 @@ class TestSuggestedRpmRange:
         assert lo >= 15000 or hi <= 15000  # at least one end in the big gap
 
 
+class TestFormatMillingGuidanceForCycle:
+    """format_milling_guidance_for_cycle for GUI / near real-time display."""
+
+    def test_returns_string_with_fn_avoid_suggested_best(self):
+        result = TapTestResult(
+            sample_rate_hz=800.0,
+            natural_freq_hz=500.0,
+            magnitude_axis="magnitude",
+            avoid_rpm=[6000.0, 12000.0],
+            suggested_rpm_min=8000.0,
+            suggested_rpm_max=10000.0,
+            n_teeth_used=4,
+            harmonic_order_max=5,
+            max_rpm=24000.0,
+            min_rpm=4000.0,
+            tool_diameter_mm=6.0,
+            natural_freq_hz_uncertainty=2.0,
+        )
+        text = format_milling_guidance_for_cycle(result, material_name="6061 aluminum")
+        assert "500" in text
+        assert "Natural frequency" in text
+        assert "Avoid RPM" in text
+        assert "Suggested RPM" in text
+        assert "Best stability" in text
+        assert "Process damping" in text
+        assert "Cutting coefficients" in text
+        assert "If chatter" in text or "chatter" in text
+        assert "6061" in text or "aluminum" in text
+
+    def test_n_lobes_controls_number_of_speeds(self):
+        result = TapTestResult(
+            sample_rate_hz=800.0,
+            natural_freq_hz=500.0,
+            magnitude_axis="magnitude",
+            avoid_rpm=[],
+            suggested_rpm_min=4000.0,
+            suggested_rpm_max=24000.0,
+            n_teeth_used=4,
+            harmonic_order_max=5,
+            max_rpm=24000.0,
+            min_rpm=4000.0,
+            tool_diameter_mm=None,
+            natural_freq_hz_uncertainty=None,
+        )
+        text_3 = format_milling_guidance_for_cycle(result, n_lobes=3)
+        text_2 = format_milling_guidance_for_cycle(result, n_lobes=2)
+        assert "N0=" in text_3 and "N1=" in text_3 and "N2=" in text_3
+        assert "N0=" in text_2 and "N1=" in text_2
+        assert "N2=" not in text_2
+
+
+class TestToolingConfiguration:
+    def test_from_tap_result(self, default_flute_count, default_tool_diameter_mm):
+        result = TapTestResult(
+            sample_rate_hz=800.0,
+            natural_freq_hz=500.0,
+            magnitude_axis="magnitude",
+            avoid_rpm=[6000.0],
+            suggested_rpm_min=4000.0,
+            suggested_rpm_max=8000.0,
+            n_teeth_used=default_flute_count,
+            harmonic_order_max=5,
+            max_rpm=24000.0,
+            min_rpm=4000.0,
+            tool_diameter_mm=default_tool_diameter_mm,
+            natural_freq_hz_uncertainty=1.0,
+        )
+        config = ToolingConfiguration.from_tap_result(result, material_name="6061 aluminum")
+        assert config.n_teeth == default_flute_count
+        assert config.tool_diameter_mm == default_tool_diameter_mm
+        assert config.natural_freq_hz == 500.0
+        assert config.natural_freq_hz_uncertainty == 1.0
+        assert "6061" in config.material_name or "aluminum" in config.material_name
+
+    def test_direct_construction(self):
+        config = ToolingConfiguration(
+            tool_diameter_mm=19.0,
+            n_teeth=4,
+            material_name="6061 aluminum",
+            natural_freq_hz=900.0,
+            label="19mm 4fl",
+        )
+        assert config.n_teeth == 4
+        assert config.label == "19mm 4fl"
+
+
+class TestPlotToolingConfigurationsFigure:
+    def test_plots_one_config(self, tmp_path):
+        configs = [
+            ToolingConfiguration(
+                tool_diameter_mm=6.0,
+                n_teeth=3,
+                material_name="6061 aluminum",
+                natural_freq_hz=100.0,
+            ),
+        ]
+        out = tmp_path / "tooling_one.png"
+        fig = plot_tooling_configurations_figure(configs, output_path=out)
+        assert len(fig.axes) >= 1
+        assert out.exists()
+        assert out.stat().st_size > 200
+
+    def test_plots_three_configs_two_columns(self, tmp_path):
+        configs = [
+            ToolingConfiguration(6.0, 3, "6061 aluminum", 100.0),
+            ToolingConfiguration(19.0, 4, "6061 aluminum", 900.0),
+            ToolingConfiguration(6.0, 3, "7075 aluminum", 500.0),
+        ]
+        out = tmp_path / "tooling_three.png"
+        fig = plot_tooling_configurations_figure(configs, output_path=out, max_cols=2)
+        assert len(fig.axes) >= 3
+        assert out.exists()
+
+    def test_empty_configs_raises(self):
+        with pytest.raises(ValueError, match="At least one ToolingConfiguration"):
+            plot_tooling_configurations_figure([])
+
+
+class TestComputeSdofInterpretation:
+    def test_given_mass_returns_effective_stiffness(self):
+        result = TapTestResult(
+            sample_rate_hz=800,
+            natural_freq_hz=100.0,
+            magnitude_axis="magnitude",
+            avoid_rpm=[],
+            suggested_rpm_min=4000,
+            suggested_rpm_max=24000,
+            n_teeth_used=4,
+            harmonic_order_max=5,
+            max_rpm=24000,
+            min_rpm=4000,
+            tool_diameter_mm=None,
+        )
+        interp = compute_sdof_interpretation(result, mass_kg=0.1)
+        assert "effective_stiffness_n_per_m" in interp
+        # k = m * (2π*f_n)²; f_n=100, m=0.1 => k = 0.1 * (200π)² ≈ 39478
+        assert 35_000 <= interp["effective_stiffness_n_per_m"] <= 45_000
+        assert "nutshell" in interp
+
+    def test_given_stiffness_returns_effective_mass(self):
+        result = TapTestResult(
+            sample_rate_hz=800,
+            natural_freq_hz=100.0,
+            magnitude_axis="magnitude",
+            avoid_rpm=[],
+            suggested_rpm_min=4000,
+            suggested_rpm_max=24000,
+            n_teeth_used=4,
+            harmonic_order_max=5,
+            max_rpm=24000,
+            min_rpm=4000,
+            tool_diameter_mm=None,
+        )
+        interp = compute_sdof_interpretation(result, stiffness_n_per_m=40_000.0)
+        assert "effective_mass_kg" in interp
+        # m = k / (2π*f_n)² ≈ 40000 / 394784 ≈ 0.101
+        assert 0.09 <= interp["effective_mass_kg"] <= 0.11
+        assert "nutshell" in interp
+
+
 class TestAnalyzeTap:
     def test_analyze_synthetic_csv_detects_near_100_hz(
         self, synthetic_tap_csv, default_flute_count, default_tool_diameter_mm
@@ -107,6 +273,23 @@ class TestAnalyzeTap:
         assert result.min_rpm == 4000
         # With 100 Hz and 3 flutes, critical RPMs are 2000, 1000, ... all below min_rpm 4000, so avoid_rpm can be empty
         assert result.suggested_rpm_min < result.suggested_rpm_max
+
+    def test_analyze_synthetic_csv_includes_fft_uncertainty(
+        self, synthetic_tap_csv, default_flute_count, default_tool_diameter_mm, sample_rate_hz
+    ):
+        """Result includes measurement uncertainty from FFT frequency resolution."""
+        result = analyze_tap(
+            synthetic_tap_csv,
+            flute_count=default_flute_count,
+            tool_diameter_mm=default_tool_diameter_mm,
+            use_axis="x",
+        )
+        assert result.natural_freq_hz_uncertainty is not None
+        assert result.natural_freq_hz_uncertainty > 0
+        # FFT resolution: df = sample_rate_hz / n; synthetic has 0.5 s * 800 = 400 samples => df=2, half-bin=1
+        n = int(sample_rate_hz * 0.5)
+        expected_u = 0.5 * (sample_rate_hz / n)
+        assert 0.5 <= result.natural_freq_hz_uncertainty <= 2.0 * expected_u
 
 
 class TestAnalyzeTapData:
@@ -134,6 +317,63 @@ class TestAnalyzeTapData:
         assert result.sample_rate_hz == sample_rate_hz
         assert result.n_teeth_used == default_flute_count
         assert result.tool_diameter_mm == default_tool_diameter_mm
+
+    def test_analysis_on_combined_multi_tap_data_uses_several_impact_cycles(
+        self, three_tap_csvs, default_flute_count, default_tool_diameter_mm
+    ):
+        """Analysis is validated on combined data from several impact cycles, not a single tap."""
+        t_combined, data_combined, sr = _combine_tap_csvs(three_tap_csvs)
+        assert data_combined.shape[1] == 3 * 200  # three taps, 200 samples each
+        result = analyze_tap_data(
+            t_combined,
+            data_combined,
+            sr,
+            flute_count=default_flute_count,
+            tool_diameter_mm=default_tool_diameter_mm,
+            use_axis="x",
+        )
+        # Dominant frequency from combined multi-tap data (fixture uses 100 Hz on x)
+        assert 85 <= result.natural_freq_hz <= 115
+        assert result.sample_rate_hz == sr
+
+    def test_analyze_tap_data_includes_uncertainty(
+        self, sample_rate_hz, default_flute_count, default_tool_diameter_mm
+    ):
+        """analyze_tap_data sets natural_freq_hz_uncertainty from FFT resolution."""
+        n = 512
+        t = np.arange(n) / sample_rate_hz
+        data = np.stack([np.sin(2 * np.pi * 80 * t), np.zeros(n), np.zeros(n)])
+        result = analyze_tap_data(
+            t, data, sample_rate_hz,
+            flute_count=default_flute_count,
+            tool_diameter_mm=default_tool_diameter_mm,
+            use_axis="x",
+        )
+        assert result.natural_freq_hz_uncertainty is not None
+        assert result.natural_freq_hz_uncertainty > 0
+
+    def test_tap_spread_std_increases_combined_uncertainty(
+        self, sample_rate_hz, default_flute_count, default_tool_diameter_mm
+    ):
+        """Passing tap_spread_std_hz yields combined uncertainty >= FFT-only."""
+        n = 512
+        t = np.arange(n) / sample_rate_hz
+        data = np.stack([np.sin(2 * np.pi * 80 * t), np.zeros(n), np.zeros(n)])
+        r_no_spread = analyze_tap_data(
+            t, data, sample_rate_hz,
+            flute_count=default_flute_count,
+            tool_diameter_mm=default_tool_diameter_mm,
+            use_axis="x",
+        )
+        r_with_spread = analyze_tap_data(
+            t, data, sample_rate_hz,
+            flute_count=default_flute_count,
+            tool_diameter_mm=default_tool_diameter_mm,
+            use_axis="x",
+            tap_spread_std_hz=0.5,
+        )
+        assert r_with_spread.natural_freq_hz_uncertainty is not None
+        assert r_with_spread.natural_freq_hz_uncertainty >= r_no_spread.natural_freq_hz_uncertainty
 
 
 class TestFeedRateMmMin:
@@ -202,7 +442,7 @@ class TestPlotResultFigure:
         xlim = ax.get_xlim()
         assert xlim[0] == result.min_rpm
         assert xlim[1] == result.max_rpm
-        assert ax.get_xlabel() == "Spindle speed (RPM)"
+        assert ax.get_xlabel() == "Spindle speed (rpm)"
         assert out.exists()
         assert out.stat().st_size > 500  # PNG has non-trivial content
 
@@ -224,16 +464,48 @@ class TestPlotResultFigure:
             (t, np.random.randn(3, n) * 0.1 + np.array([[0], [0], [1]])),
         ]
         out = tmp_path / "cycle_chart.png"
-        fig = plot_cycle_result_figure(result, tap_series_list, output_path=out, figsize=(6, 5))
-        assert len(fig.axes) == 2
-        ax_rpm, ax_traces = fig.axes[0], fig.axes[1]
-        assert ax_rpm.get_xlabel() == "Spindle speed (RPM)"
+        fig = plot_cycle_result_figure(result, tap_series_list, output_path=out, figsize=(6, 6))
+        assert len(fig.axes) == 4
+        ax_rpm, ax_traces, ax_spectrum, ax_milling = fig.axes[0], fig.axes[1], fig.axes[2], fig.axes[3]
+        assert ax_rpm.get_xlabel() == "Spindle speed (rpm)"
         assert ax_traces.get_xlabel() == "Time (s)"
         assert ax_traces.get_ylabel() == "Magnitude (g)"
+        assert ax_spectrum.get_xlabel() == "Frequency (Hz)"
         legend_labels = [t.get_text() for t in ax_traces.get_legend().get_texts()]
         assert "Average" in legend_labels
         assert "Tap 1" in legend_labels
         assert "Tap 2" in legend_labels
         assert "Tap 3" in legend_labels
+        # Milling dynamics panel is fourth axis
+        assert len(ax_milling.get_children()) > 0
+        assert out.exists()
+        assert out.stat().st_size > 500
+
+    def test_plot_milling_dynamics_figure_6mm_3fl(
+        self, tmp_path, default_flute_count, default_tool_diameter_mm
+    ):
+        """Milling dynamics figure for 6 mm, 3-flute: structure and saved file."""
+        result = TapTestResult(
+            sample_rate_hz=800.0,
+            natural_freq_hz=100.0,
+            magnitude_axis="x",
+            avoid_rpm=[6000.0],
+            suggested_rpm_min=5000.0,
+            suggested_rpm_max=7000.0,
+            n_teeth_used=default_flute_count,
+            harmonic_order_max=5,
+            max_rpm=24000.0,
+            min_rpm=4000.0,
+            tool_diameter_mm=default_tool_diameter_mm,
+            natural_freq_hz_uncertainty=0.5,
+        )
+        out = tmp_path / "milling_dynamics_6mm_3fl.png"
+        fig = plot_milling_dynamics_figure(
+            result,
+            output_path=out,
+            n_lobes=3,
+            figsize=(8, 5),
+        )
+        assert len(fig.axes) == 1
         assert out.exists()
         assert out.stat().st_size > 500

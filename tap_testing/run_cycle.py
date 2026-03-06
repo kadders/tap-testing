@@ -12,7 +12,8 @@ from pathlib import Path
 import numpy as np
 
 from .analyze import analyze_tap_data, load_tap_csv, plot_result
-from .config import get_config
+from .config import get_config, rpm_from_spindle_frequency_hz
+from .measurement_uncertainties import natural_freq_uncertainty_from_tap_spread
 from .record_tap import record_tap
 
 
@@ -80,26 +81,33 @@ def _combine_tap_csvs(paths: list[Path]) -> tuple[np.ndarray, np.ndarray, float]
 def run_cycle(
     output_dir: str | Path | None = None,
     iterations: int = 3,
-    spacing_s: float = 15.0,
+    spacing_s: float = 5.0,
     duration_s: float | None = None,
     sample_rate_hz: float | None = None,
     led_gpio: int | None = None,
     flute_count: int = 4,
     max_rpm: float = 24000.0,
     tool_diameter_mm: float | None = None,
+    tool_material: str | None = None,
     plot: bool = True,
     plot_out: str | Path | None = None,
+    material_name: str | None = None,
+    spindle_operating_frequency_hz: float | None = None,
 ) -> tuple[list[Path], Path | None]:
     """
     Run multiple tap tests in sequence, combine data, analyze and optionally plot.
 
     LED (if led_gpio set): ON during each recording, OFF during wait.
     Saves per-tap CSVs and one combined CSV; analysis uses the combined data.
+    material_name: Workpiece material for chart label (e.g. "6061 aluminum"); if None, uses config.
+    tool_material: Tool (cutter) material for chart label (e.g. "carbide", "HSS"); if None, uses config.
 
     Returns:
         (list of per-tap CSV paths, path to combined CSV or None)
     """
     cfg = get_config()
+    if material_name is None:
+        material_name = cfg.material_name
     if output_dir is None:
         output_dir = Path(__file__).resolve().parent.parent / "data" / "cycle"
     output_dir = Path(output_dir)
@@ -130,7 +138,16 @@ def run_cycle(
         if use_led:
             _led_on(led_gpio)
         try:
-            record_tap(tap_path, duration_s=duration_s, sample_rate_hz=sample_rate_hz)
+
+            def on_tap(t_s: float) -> None:
+                print(f"  Tap detected at t={t_s:.2f} s")
+
+            record_tap(
+                tap_path,
+                duration_s=duration_s,
+                sample_rate_hz=sample_rate_hz,
+                on_tap_detected=on_tap,
+            )
         finally:
             if use_led:
                 _led_off(led_gpio)
@@ -151,14 +168,37 @@ def run_cycle(
         for j in range(len(t_combined)):
             writer.writerow((t_combined[j], data_combined[0, j], data_combined[1, j], data_combined[2, j]))
 
+    # Per-tap natural frequencies for measurement uncertainty (tap-to-tap spread)
+    tap_freqs_hz: list[float] = []
+    for p in tap_paths:
+        t_tap, data_tap, sr_tap = load_tap_csv(p)
+        if sr_tap <= 0 and len(t_tap) > 1:
+            sr_tap = 1.0 / float(np.median(np.diff(t_tap)))
+        if sr_tap > 0 and data_tap.size >= 6:
+            r_tap = analyze_tap_data(
+                t_tap, data_tap, sr_tap,
+                flute_count=flute_count,
+                max_rpm=max_rpm,
+                tool_diameter_mm=tool_diameter_mm,
+                tool_material=tool_material,
+            )
+            tap_freqs_hz.append(r_tap.natural_freq_hz)
+    tap_spread_std_hz = natural_freq_uncertainty_from_tap_spread(tap_freqs_hz) if len(tap_freqs_hz) >= 2 else None
+
+    if spindle_operating_frequency_hz is None:
+        spindle_operating_frequency_hz = get_config().spindle_operating_frequency_hz
     result = analyze_tap_data(
         t_combined, data_combined, sr,
         flute_count=flute_count,
         max_rpm=max_rpm,
         tool_diameter_mm=tool_diameter_mm,
+        tool_material=tool_material,
+        tap_spread_std_hz=tap_spread_std_hz,
+        spindle_operating_frequency_hz=spindle_operating_frequency_hz,
     )
 
-    print(f"\nNatural frequency: {result.natural_freq_hz:.1f} Hz")
+    unc_str = f" ± {result.natural_freq_hz_uncertainty:.2f}" if result.natural_freq_hz_uncertainty else ""
+    print(f"\nNatural frequency: {result.natural_freq_hz:.1f}{unc_str} Hz")
     print(f"Avoid RPM: {result.avoid_rpm}")
     print(f"Suggested RPM range: {result.suggested_rpm_min:.0f} – {result.suggested_rpm_max:.0f}")
 
@@ -166,7 +206,11 @@ def run_cycle(
     chart_path = plot_out if plot_out is not None else run_dir / "rpm_chart.png"
     from .analyze import load_tap_csv as load_csv, plot_cycle_result_figure
     tap_series_list = [(load_csv(p)[0], load_csv(p)[1]) for p in tap_paths]
-    fig = plot_cycle_result_figure(result, tap_series_list, output_path=chart_path)
+    reference_rpm = rpm_from_spindle_frequency_hz(spindle_operating_frequency_hz) if spindle_operating_frequency_hz > 0 else None
+    fig = plot_cycle_result_figure(
+        result, tap_series_list, output_path=chart_path, material_name=material_name,
+        reference_rpm=reference_rpm, reference_chip_load=0.05,
+    )
     print(f"Chart saved to {chart_path} (view anytime)")
     if plot:
         import matplotlib.pyplot as plt
@@ -212,7 +256,31 @@ def main() -> None:
     parser.add_argument("--no-led", action="store_true", help="Do not use status LED")
     parser.add_argument("--flutes", type=int, default=4, help="Flute count for analysis")
     parser.add_argument("--max-rpm", type=float, default=24000, help="Max spindle RPM")
+    parser.add_argument(
+        "--spindle-frequency",
+        type=float,
+        default=None,
+        metavar="HZ",
+        dest="spindle_frequency_hz",
+        help=f"Spindle operating frequency in Hz (rev/s); used as reference on chart. rpm = HZ × 60 (default {cfg.spindle_operating_frequency_hz}).",
+    )
     parser.add_argument("--tool-diameter", type=float, default=None, metavar="MM", help="Tool diameter (mm)")
+    from .material import list_material_names, list_tool_material_names
+    parser.add_argument(
+        "--material",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help=f"Workpiece material for chart (default: 6061 aluminum). Choices: {', '.join(list_material_names())}",
+    )
+    parser.add_argument(
+        "--tool-material",
+        type=str,
+        default=None,
+        metavar="NAME",
+        dest="tool_material",
+        help=f"Tool (cutter) material for chart (default: carbide). Choices: {', '.join(list_tool_material_names())}",
+    )
     parser.add_argument("--plot", action="store_true", help="Show RPM chart after run")
     parser.add_argument("--plot-out", type=Path, default=None, help="Save chart to file (default: run_dir/rpm_chart.png)")
     parser.add_argument("--no-plot", action="store_true", help="Do not show or save chart")
@@ -231,6 +299,7 @@ def main() -> None:
             flute_count=args.flutes,
             max_rpm=args.max_rpm,
             tool_diameter_mm=args.tool_diameter,
+            tool_material=getattr(args, "tool_material", None),
         )
         return
 
@@ -247,8 +316,11 @@ def main() -> None:
         flute_count=args.flutes,
         max_rpm=args.max_rpm,
         tool_diameter_mm=args.tool_diameter,
+        tool_material=getattr(args, "tool_material", None),
         plot=do_plot and args.plot_out is None,
         plot_out=args.plot_out,
+        material_name=getattr(args, "material", None),
+        spindle_operating_frequency_hz=getattr(args, "spindle_frequency_hz", None),
     )
 
 
