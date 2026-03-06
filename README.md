@@ -60,11 +60,20 @@ See `tests/` for what is covered: CSV load/save, FFT dominant frequency, RPM avo
 
 ## Usage
 
-- **Check accelerometer**: `python -m tap_testing.check_sensor` — prints live X,Y,Z and magnitude until Ctrl+C.
+**Recording and analysis**
+
 - **Record a tap**: `python -m tap_testing.record_tap` — records for a fixed duration, saves CSV to `data/tap_001.csv` by default. Use `-o`, `-d`, `-r` for output path, duration, and sample rate.
 - **Run 3-tap cycle (recommended)**: `python -m tap_testing.run_cycle` — runs 3 tap tests 5 s apart (configurable with `-s`), combines the data, analyzes, and shows/saves the RPM chart. Optional **status LED** on a Pi GPIO: **ON = tap now**, **OFF = wait**. Output goes to `data/cycle/<timestamp>/`.
 - **Tap cycle with GUI (Pi)**: `python -m tap_testing.cycle_gui` or `python -m tap_testing.run_cycle --gui` — opens a window showing **live status** (e.g. "Tap 1/3 — TAP the tool now", "Waiting 15 s…") and, when done, the **RPM band chart** (red = avoid, green = optimal) in the same window. Same LED and output dir as run_cycle. **Desktop shortcut**: see [docs/DESKTOP_SHORTCUT.md](docs/DESKTOP_SHORTCUT.md) for Windows and Linux.
+- **Homing calibration GUI**: `python -m tap_testing.homing_calibration_gui` — records a single stream of ADXL data while the machine runs its homing sequence (Z up, then X/Y home). Use to capture motion and direction for spindle-mounted accelerometer calibration. Shows live X/Y plot; does not use Moonraker or Klippy. See [docs/ADXL345_WIRING.md](docs/ADXL345_WIRING.md) for wiring.
 - **Analyze and get speed/feed guidance**: `python -m tap_testing.analyze data/tap_001.csv --flutes 4 --max-rpm 24000 --tool-diameter 6` — prints natural frequency, RPMs to avoid, and a suggested stable RPM range. To analyze a past cycle run use the combined CSV: `python -m tap_testing.analyze data/cycle/<timestamp>/combined.csv --flutes 4 --max-rpm 24000 --plot`. Use `--plot` to show a chart (red = avoid, green = optimal) or `--plot-out file.png` to save it. Use `--plot-spectrum` or `--plot-spectrum-out file.png` to generate the FFT magnitude spectrum (impact-test analysis: verify dominant peak). Use `--chip-load` for example feed. For the **recommended order** of analysis and all visualizations (time signal → spectrum → FRF when force → RPM/optimal loads/resonance map → milling dynamics), use `--workflow` or `--plot-all` and see **[docs/ANALYSIS_WORKFLOW.md](docs/ANALYSIS_WORKFLOW.md)**.
+
+**Diagnostics and inspection**
+
+- **Check accelerometer (live stream)**: `python -m tap_testing.check_sensor` — prints live X,Y,Z and magnitude until Ctrl+C.
+- **SPI / device probe**: `python -m tap_testing.verify_spi_accel --probe` — finds which spidev has the ADXL345 (DEVID 0xE5). `python -m tap_testing.verify_spi_accel --samples 20 --rate 100` streams a few samples and checks gravity (mean |a| ≈ 1 g at rest).
+- **SPI mode**: `python -m tap_testing.check_spi_mode --all` — list all spidev devices and their mode (ADXL345 needs Mode 3).
+- **Inspect recorded data**: `python -m tap_testing.inspect_tap_data <path>` — `<path>` can be a single CSV or a cycle directory (e.g. `data/cycle/<timestamp>`). Prints per-file stats and **Signal: OK (usable)** or **NO SIGNAL**. For a full verification sequence, see [docs/ADXL345_WIRING.md](docs/ADXL345_WIRING.md).
 
 ---
 
@@ -223,24 +232,46 @@ For a detailed gap analysis of impact-test graphs and milling/ideal-parameters a
 ```
 tap-testing/
   README.md           # This file
-  docs/               # Analysis and design notes
+  docs/               # Analysis and design notes (ADXL345_WIRING, ANALYSIS_WORKFLOW, etc.)
   requirements.txt    # Python dependencies
   tap_testing/        # Main package
     __init__.py
-    config.py         # Defaults (sample rate, cycle iterations/spacing, LED GPIO)
-    accelerometer.py  # ADXL345 init and streaming
-    record_tap.py     # Recording logic and output
-    analyze.py        # FFT, natural frequency, spindle speed and feed guidance
-    material.py       # Default material (6061 aluminum) and metric units for visuals
+    config.py         # Defaults (sample rate, cycle spacing, LED GPIO, SPI/I2C)
+    accelerometer.py  # ADXL345 init and streaming (I2C/SPI)
+    record_tap.py     # Single-tap recording → CSV
+    tap_cycle.py      # Combine taps, extract cycle, background subtraction
     run_cycle.py      # 3-tap cycle: record → combine → analyze → plot (optional LED)
-    cycle_gui.py      # Same cycle with Pi window: status + embedded RPM chart
-  tests/             # Pytest suite (synthetic data; no hardware)
-  data/              # Recorded tap CSVs; data/cycle/<timestamp>/ for run_cycle
+    cycle_gui.py      # Same cycle with GUI: live status + embedded RPM chart
+    homing_calibration_gui.py  # Record stream during machine homing (spindle-mount calibration)
+    analyze.py        # FFT, natural frequency, RPM/feed guidance, chart generation
+    material.py       # Workpiece materials (6061 aluminum default), metric units
+    measurement_uncertainties.py  # FFT resolution, tap spread, FRF corrections
+    feeds_speeds.py   # Chip load, TEA, MRR, SFM, power/torque
+    milling_dynamics.py   # Stability lobes, cutting geometry, time-domain milling
+    sdof.py           # SDOF vibration (natural freq, stiffness, mass); re-exports docs.sdof nutshells
+    twodof.py         # 2DOF chain model, modal FRF; re-exports docs.twodof nutshells
+    modal_fit.py      # Peak-picking system ID; re-exports docs.modal_fit nutshells
+    transducers.py    # Inertance/receptance, phase correction; re-exports docs.transducers
+    check_sensor.py   # Live X,Y,Z stream (CLI)
+    check_spi_mode.py    # List spidev devices and SPI mode
+    verify_spi_accel.py  # Probe for ADXL345, stream samples, gravity check
+    inspect_tap_data.py  # Per-file or per-cycle stats and signal check
+    docs/             # Documentation helpers (no runtime logic)
+      generate_example_chart.py   # Example chart images (synthetic data)
+      excitation.py   # Excitation types / tap-test reference text
+      sdof.py         # SDOF nutshell summaries
+      twodof.py       # 2DOF nutshell summaries
+      modal_fit.py    # Modal fit nutshell summaries
+      transducers.py  # Transducer nutshell summaries
+      milling_dynamics.py  # Milling dynamics nutshell summaries
+  tests/              # Pytest suite (synthetic data; no hardware)
+  data/               # Sampling output (git-ignored): tap CSVs, data/cycle/<timestamp>/, homing
+  example_output/     # Example chart output (optional, from docs.generate_example_chart)
 ```
 
 ## Data format
 
-Recorded CSVs have header `t_s, ax_g, ay_g, az_g`, a comment line `# sample_rate_hz, <value>`, then one row per sample. Analysis uses this to infer sample rate and run the FFT.
+Recorded CSVs have header `t_s, ax_g, ay_g, az_g`, a comment line `# sample_rate_hz, <value>`, then one row per sample. Analysis uses this to infer sample rate and run the FFT. Sampling output (tap CSVs, cycle runs, homing recordings) is written under `data/`; that directory is git-ignored.
 
 ## License
 
