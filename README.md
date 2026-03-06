@@ -1,10 +1,11 @@
 # Tap Testing for Milo
 
-Tap testing application for measuring tool vibrations using an accelerometer mounted at the tool tip. A hammer tap excites the structure; the ADXL345 records the response for analysis (e.g. frequency content, decay).
+Tap testing application for measuring tool vibrations using an accelerometer mounted at the tool tip. **We default to impulse excitation**: a hammer tap excites the structure and the ADXL345 records the response for analysis (e.g. frequency content, decay).
 
 ## Scope
 
 - **Hardware**: ADXL345 accelerometer + Raspberry Pi
+- **Excitation**: **Impulse** by default (hammer tap); excites many frequencies at once
 - **Use case**: Mount accelerometer on tool, tap with hammer, capture and store vibration data
 - **Stack**: Python 3, I2C (or SPI) to the ADXL345
 
@@ -61,9 +62,39 @@ See `tests/` for what is covered: CSV load/save, FFT dominant frequency, RPM avo
 
 - **Check accelerometer**: `python -m tap_testing.check_sensor` — prints live X,Y,Z and magnitude until Ctrl+C.
 - **Record a tap**: `python -m tap_testing.record_tap` — records for a fixed duration, saves CSV to `data/tap_001.csv` by default. Use `-o`, `-d`, `-r` for output path, duration, and sample rate.
-- **Run 3-tap cycle (recommended)**: `python -m tap_testing.run_cycle` — runs 3 tap tests 15 s apart, combines the data, analyzes, and shows/saves the RPM chart. Optional **status LED** on a Pi GPIO: **ON = tap now**, **OFF = wait**. Output goes to `data/cycle/<timestamp>/`.
-- **Tap cycle with GUI (Pi)**: `python -m tap_testing.cycle_gui` or `python -m tap_testing.run_cycle --gui` — opens a window showing **live status** (e.g. "Tap 1/3 — TAP the tool now", "Waiting 15 s…") and, when done, the **RPM band chart** (red = avoid, green = optimal) in the same window. Same LED and output dir as run_cycle.
-- **Analyze and get speed/feed guidance**: `python -m tap_testing.analyze data/tap_001.csv --flutes 4 --max-rpm 24000 --tool-diameter 6` — prints natural frequency, RPMs to avoid, and a suggested stable RPM range. Use `--plot` to show a chart (red = avoid, green = optimal) or `--plot-out file.png` to save it. Use `--chip-load` for example feed.
+- **Run 3-tap cycle (recommended)**: `python -m tap_testing.run_cycle` — runs 3 tap tests 5 s apart (configurable with `-s`), combines the data, analyzes, and shows/saves the RPM chart. Optional **status LED** on a Pi GPIO: **ON = tap now**, **OFF = wait**. Output goes to `data/cycle/<timestamp>/`.
+- **Tap cycle with GUI (Pi)**: `python -m tap_testing.cycle_gui` or `python -m tap_testing.run_cycle --gui` — opens a window showing **live status** (e.g. "Tap 1/3 — TAP the tool now", "Waiting 15 s…") and, when done, the **RPM band chart** (red = avoid, green = optimal) in the same window. Same LED and output dir as run_cycle. **Desktop shortcut**: see [docs/DESKTOP_SHORTCUT.md](docs/DESKTOP_SHORTCUT.md) for Windows and Linux.
+- **Analyze and get speed/feed guidance**: `python -m tap_testing.analyze data/tap_001.csv --flutes 4 --max-rpm 24000 --tool-diameter 6` — prints natural frequency, RPMs to avoid, and a suggested stable RPM range. To analyze a past cycle run use the combined CSV: `python -m tap_testing.analyze data/cycle/<timestamp>/combined.csv --flutes 4 --max-rpm 24000 --plot`. Use `--plot` to show a chart (red = avoid, green = optimal) or `--plot-out file.png` to save it. Use `--plot-spectrum` or `--plot-spectrum-out file.png` to generate the FFT magnitude spectrum (impact-test analysis: verify dominant peak). Use `--chip-load` for example feed. For the **recommended order** of analysis and all visualizations (time signal → spectrum → FRF when force → RPM/optimal loads/resonance map → milling dynamics), use `--workflow` or `--plot-all` and see **[docs/ANALYSIS_WORKFLOW.md](docs/ANALYSIS_WORKFLOW.md)**.
+
+---
+
+## Force excitation
+
+Common ways to excite a structure for FRF or natural-frequency measurement:
+
+- **Sine-sweep** — Fixed-frequency sine; response is measured one frequency at a time with averaging.
+- **Random** — Broadband (white) or band-limited (pink) noise; averaging over a fixed time.
+- **Impulse (impact)** — A short impact (e.g. hammer tap) excites many frequencies at once; multiple taps are often averaged in the frequency domain to improve coherence.
+
+*In a nutshell:* hitting the structure with a hammer excites many frequencies at almost the same level at the same time. **This code defaults to impulse (impact) excitation**: you tap the tool with a hammer, and the accelerometer records the response. **We do not measure force in the basic setup**, so we get the response spectrum (FFT) and identify the dominant natural frequency; with a force sensor at the tap point we could compute the full FRF (receptance/inertance). That means: **response-only** tap test → natural frequency, avoid RPM, suggested RPM band, and best stability lobe speeds; **full FRF** (impact with force in x and y) would be needed to plot the stability lobe diagram (limiting chip width blim vs spindle speed Ω). Multiple taps (e.g. `run_cycle`) improve the estimate. For hardware, an impact hammer with a force transducer in the tip is the usual choice for tool-holder testing; plastic tips avoid damaging the cutting edge and give sufficient bandwidth.
+
+### Vibration measurement (transducers)
+
+- **Noncontact** transducers (e.g. capacitance, laser) do not influence dynamics; **contacting** types (e.g. accelerometers) are more convenient. **We use the ADXL345** for measurement: a low-mass accelerometer so that a few grams or less does not appreciably alter the response; it can be attached with wax and removed without damaging the tool.
+- The accelerometer signal is proportional to **acceleration**, so we obtain **inertance** (A/F). To get **receptance** (X/F): X/F = (A/F) / ω² (double integration in the frequency domain).
+- Amplifier and DAQ can introduce a **time delay** → phase error that increases linearly with frequency. The measured phase can be corrected as φ_c(f) = φ_m − S·f, where S (deg/Hz) comes from the delay or from calibration; the real and imaginary parts of the FRF are then updated from the magnitude and corrected phase. See `tap_testing.transducers` for conversion and phase-correction helpers.
+
+### Impact test data and graphs
+
+With the **current hardware** (accelerometer only) we do not measure force, so we cannot plot the FRF (receptance/inertance) or the stability lobe diagram (blim vs Ω). We provide: natural frequency, avoid RPM, suggested RPM band, and best stability lobe speeds. The graphs used for impact-test analysis are:
+
+1. **Time-domain response** — Tap cycles (magnitude vs time) and average; optional decay envelope.
+2. **Frequency spectrum (FFT magnitude)** — Frequency vs magnitude with natural frequency marked; per-tap and average in the cycle figure; `--plot-spectrum` / `--plot-spectrum-out` in the analyzer.
+3. **Optional decay envelope** — Exponential envelope on the time trace and estimated damping ratio (when available).
+4. **FRF magnitude/phase** — When force is measured (CSV with columns `Fx_N`, `Fy_N` or `F_N`), run `python -m tap_testing.analyze data/tap_with_force.csv --plot-frf` or `--plot-frf-out file.png` to compute and plot inertance (or receptance). See `load_tap_csv_with_force`, `compute_frf_from_impact`, `plot_frf_figure` in `tap_testing.analyze`.
+5. **Stability lobe (blim vs Ω)** — When x,y FRFs and cutting coefficients are available (impact testing with force measurement), use `compute_stability_lobe_boundary` and `plot_stability_lobe_figure` in `tap_testing.analyze` to plot the stability boundary.
+
+**Ideal milling parameters:** (1) **RPM** from tap test (avoid + suggested + best lobe speeds). (2) **Depth** from stability lobe when FRF and cutting coefficients are available. (3) **Feed** from chip load and RPM. Full stability lobe (blim vs Ω) requires x,y FRFs from impact testing with force measurement and cutting coefficients.
 
 ---
 
@@ -84,9 +115,9 @@ The tap test excites the **tool–holder–spindle** structure. The dominant fre
      `RPM = 60 × natural_freq_hz / (N_teeth × k)` for k = 1, 2, 3, …
    - Suggests a **stable RPM range**: a “pocket” between those critical RPMs where you are less likely to chatter.
 3. **Choose RPM** — Pick a spindle speed inside the suggested range (or at least away from the “avoid” list).
-4. **Feed** — Feed is not set by the tap test; it’s set by **chip load** (mm or in per tooth), number of teeth, and RPM:  
+4. **Feed** — Feed is not set by the tap test; it’s set by **chip load in mm per tooth**, number of teeth, and RPM:  
    **Feed (mm/min) = chip_load_mm × N_teeth × RPM**.  
-   Use material/tool guidelines for chip load; the tap test only tells you which RPM range is safe. The analyzer can print an example feed for a given chip load with `--chip-load`.
+   Use material/tool guidelines for chip load; the tap test only tells you which RPM range is safe. The analyzer can print an example feed for a given chip load with `--chip-load`. **If your reference gives chip load in inches per tooth** (e.g. 0.002 in/tooth), convert to mm/tooth first: multiply by 25.4 (e.g. 0.002 in/tooth → 0.0508 mm/tooth).
 
 ### Parameters
 
@@ -126,13 +157,73 @@ python -m tap_testing.analyze data/tap_001.csv --flutes 4 --chip-load 0.05
 # At 3000 RPM, chip load 0.05 mm/tooth → feed ≈ 600.0 mm/min
 ```
 
-So: **tap test → natural frequency → avoid those RPMs, use a stable pocket → set feed from chip load and chosen RPM.**
+So: **tap test → natural frequency → avoid those RPMs, use a stable pocket → set feed from chip load and chosen RPM.** Ideal milling parameters: **(1) RPM** from tap test (avoid + suggested + best lobe speeds); **(2) depth** from stability lobe (blim vs Ω) when x,y FRFs and cutting coefficients are available; **(3) feed** from chip load and RPM (see above).
+
+### Units and reference formulas (metric vs imperial)
+
+All formulas and inputs in this project use **metric** units: mm, mm/min, mm/tooth, N/mm², Hz, rpm. The relationship **Feed = chip_load × N_teeth × RPM** is dimensionally correct in both systems: with chip load in **mm/tooth** you get feed in **mm/min**; with chip load in **in/tooth** you would get feed in **IPM** (inches per minute). We implement and document **metric only**.
+
+Many machining reference materials (US handbooks, tooling charts, some textbooks) use **imperial** units: feed in IPM, chip load in in/tooth, cutting speed in SFM. If you use such a source, **convert before entering**:
+
+- **Chip load:** in/tooth × 25.4 = mm/tooth (e.g. 0.002 in/tooth → 0.0508 mm/tooth).
+- **Feed:** IPM × 25.4 = mm/min.
+
+The textbook equations cited in the code (e.g. Sect. 4.x, Eq. 4.14) are implemented here in SI/metric; the original source may use imperial in its examples. For a full **equation-by-equation mapping** and imperial→metric conversion table, see **[docs/METRIC_FORMULAS_REFERENCE.md](docs/METRIC_FORMULAS_REFERENCE.md)**. You can place `Machining Dynamics.pdf` in `docs/` to cross-check with the textbook.
+
+### Example visuals (6 mm, 3-flute endmill, 6061 aluminum, metric)
+
+The default workpiece material is **6061 aluminum** (most common use case). Other materials (e.g. 7075 aluminum, A36 steel) can be set with **`--material`** or in config; see `tap_testing.material`. All charts and outputs use **metric units** (mm, mm/min, Hz, rpm, g).
+
+To generate test charts with synthetic data (no hardware), including milling dynamics mapping:
+
+**Most thorough example output (all chart types):**
+
+```bash
+python -m tap_testing.docs.generate_example_chart -o example_output
+```
+
+To also get charts labeled for another material (e.g. 7075 aluminum):
+
+```bash
+python -m tap_testing.docs.generate_example_chart -o example_output --material "7075 aluminum"
+```
+
+This writes to `example_output/` (default). Each chart uses the default material (6061 aluminum) unless you pass `--material <name>`. All units are metric.
+
+To generate **only the optimal-loads chart** for a given tool (all data points: avoid/optimal bands, best lobe speeds, and a table of RPM / feed / f_tooth), use:
+
+```bash
+python -m tap_testing.docs.generate_example_chart --optimal-loads-only --tool-diameter 6 --flutes 3 --natural-freq 100 --chip-load 0.05 -o example_output
+```
+
+- **rpm_chart_example.png** — RPM bands (avoid / optimal), tool diameter, flute count, **workpiece material**, and metric label.
+- **spectrum_example_6mm_3fl.png** — Standalone FFT magnitude spectrum (natural frequency marked); same data as in the cycle chart spectrum subplot.
+- **cycle_chart_example.png** and **cycle_chart_example_6mm_3fl.png** — RPM bands; three tap cycles and average magnitude; FFT spectrum (per-tap + average, optional ζ); and a **milling dynamics** panel showing **material**, natural frequency ± **measurement uncertainty**, best stability lobe speeds (N=0,1,2), and a note to use `--material` for other materials.
+- **milling_dynamics_example_6mm_3fl.png** — Standalone summary of all added data:
+  - Tap-test result: natural frequency ± uncertainty, avoid RPM, suggested RPM range
+  - **Measurement uncertainty**: from FFT resolution and/or tap-to-tap spread
+  - **Workpiece material** (with list of other materials: `--material '7075 aluminum' | 'A36 steel'`)
+  - Tooth-passing formula and example (f_tooth at 10,000 rpm)
+  - Best stability lobe speeds (N=0,1,2,…)
+  - Metric units note
+- **optimal_loads_example_6mm_3fl.png** — All optimal-load data points for the tool: RPM bands (avoid/optimal), best stability lobe speeds (N=0,1,…) as points, and a table of RPM, feed (mm/min), and f_tooth (Hz) at the given chip load. Use `--optimal-loads-only` with `--tool-diameter`, `--flutes`, `--natural-freq`, `--chip-load` to generate for a specific tool input.
+
+**Not in the example set (require different inputs):** **FRF** (magnitude/phase) and **stability lobe** (blim vs Ω) need impact-test CSV with force columns (Fx_N, Fy_N or F_N) and, for the lobe, cutting coefficients. Use `python -m tap_testing.analyze <csv_with_force> --plot-frf-out frf.png` for FRF; use `compute_stability_lobe_boundary` and `plot_stability_lobe_figure` in code when you have x,y FRF arrays and Ks, β, etc. The analyzer also prints **SDOF interpretation** (effective stiffness/mass) with `--mass` or `--stiffness`; that is text-only, not plotted.
+
+The visuals and example output therefore show the new data: material selection, measurement uncertainties, tooth passing, stability lobe speeds, and metric-only units.
+
+### Milling dynamics (nutshell)
+
+Whereas in turning operations the chip thickness and chip width are fixed, this is not the case in milling. In a straight slotting cut, the chip thickness encountered by each tooth varies continuously as that tooth enters and exits the cut. In pocket milling, the radial depth of cut may also change. In sculptured surface milling, the axial depth of cut may vary as well. Even though the motion of the rotating tool with respect to the workpiece may be relatively simple to visualize, the exact conditions of cutting-edge engagement with the workpiece can be surprisingly complicated. See `tap_testing.milling_dynamics` for the programmatic summary.
+
+For a detailed gap analysis of impact-test graphs and milling/ideal-parameters alignment with machining-dynamics principles, see **`docs/MACHINING_DYNAMICS_ANALYSIS.md`**.
 
 ## Project layout
 
 ```
 tap-testing/
   README.md           # This file
+  docs/               # Analysis and design notes
   requirements.txt    # Python dependencies
   tap_testing/        # Main package
     __init__.py
@@ -140,10 +231,11 @@ tap-testing/
     accelerometer.py  # ADXL345 init and streaming
     record_tap.py     # Recording logic and output
     analyze.py        # FFT, natural frequency, spindle speed and feed guidance
+    material.py       # Default material (6061 aluminum) and metric units for visuals
     run_cycle.py      # 3-tap cycle: record → combine → analyze → plot (optional LED)
     cycle_gui.py      # Same cycle with Pi window: status + embedded RPM chart
-  tests/              # Pytest suite (synthetic data; no hardware)
-  data/               # Recorded tap CSVs; data/cycle/<timestamp>/ for run_cycle
+  tests/             # Pytest suite (synthetic data; no hardware)
+  data/              # Recorded tap CSVs; data/cycle/<timestamp>/ for run_cycle
 ```
 
 ## Data format

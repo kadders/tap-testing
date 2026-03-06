@@ -1,8 +1,16 @@
 # Tap testing: ADXL345 + Raspberry Pi
 # Use a venv and Python 3.8+ on the Pi.
+#
+# For the cycle GUI (python -m tap_testing.cycle_gui) you also need tkinter.
+# It is not installable via pip; use your system package manager, e.g.:
+#   Debian/Ubuntu/Raspberry Pi OS: sudo apt install python3-tk
 
 # CircuitPython on Raspberry Pi (I2C/SPI)
 adafruit-blinka>=8.0.0
+# Optional: select I2C bus by number (e.g. 1, 20, 21). Required if i2c_bus != 1.
+adafruit-extended-bus>=1.0.0
+# On Pi with SPI: spidev enables Mode 3 for ADXL345 (avoids DEVID 0x00). pip install spidev if missing.
+spidev>=3.0
 
 # ADXL345 driver (PyPI uses 1.x versioning; pulls in adafruit-circuitpython-busdevice)
 adafruit-circuitpython-adxl34x>=1.12.0
@@ -10,8 +18,10 @@ adafruit-circuitpython-adxl34x>=1.12.0
 # Data handling and optional analysis
 numpy>=1.20.0
 
-# Chart (RPM band visualization)
+# Chart (RPM band visualization); Pillow needed for TkAgg embedding in cycle_gui and homing_calibration_gui
+# On Debian/Ubuntu, if using system Python, you may need: sudo apt install python3-pil.imagetk
 matplotlib>=3.5.0
+Pillow>=9.0.0
 
 # Optional on Raspberry Pi only: status LED for run_cycle (pip install RPi.GPIO on Pi)
 # RPi.GPIO>=0.7.0
