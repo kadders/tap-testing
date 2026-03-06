@@ -1,0 +1,1964 @@
+System Information
+------------------
+
+Raspberry Pi 4 Model B Rev 1.1
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+VERSION="12 (bookworm)"
+
+DuetPi reference 2024-09-19
+Generated using pi-gen, https://github.com/RPi-Distro/pi-gen, caaa19e19c2e264dbcd6851cba288ea697240ac4, stage-dsf-gui
+
+Linux MPCNC 6.12.47+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.12.47-1+rpt1~bookworm (2025-09-16) aarch64 GNU/Linux
+Revision	: c03111
+Serial		: 100000002ed2d1e6
+Model		: Raspberry Pi 4 Model B Rev 1.1
+Throttled flag  : throttled=0x50000
+Camera          : supported=0 detected=0, libcamera interfaces=0
+
+Videocore information
+---------------------
+
+Aug 20 2025 17:02:31 
+Copyright (c) 2012 Broadcom
+version cd866525580337c0aee4b25880e1f5f9f674fb24 (clean) (release) (start)
+
+alloc failures:     0
+compactions:        0
+legacy block fails: 0
+
+
+Filesystem information
+----------------------
+Filesystem                                   1K-blocks      Used  Available Use% Mounted on
+udev                                           1670312         0    1670312   0% /dev
+tmpfs                                           777600      1412     776188   1% /run
+/dev/mmcblk0p2                                59217736  18581304   37608056  34% /
+tmpfs                                          1943996     25084    1918912   2% /dev/shm
+tmpfs                                             5120        20       5100   1% /run/lock
+/dev/mmcblk0p1                                  522230     97686     424544  19% /boot/firmware
+192.168.86.221:/media/kad/data/repositories 1921733632 399415296 1424625664  22% /mnt/repos
+tmpfs                                           388796        40     388756   1% /run/user/1000
+
+Filename				Type		Size		Used		Priority
+/var/swap                               file		204796		0		-2
+
+Package version information
+---------------------------
+raspberrypi-ui-mods:
+  Installed: 1.20250506
+raspberrypi-sys-mods:
+  Installed: 20250930~bookworm
+openbox:
+  Installed: 3.6.1-10+rpt1
+lxpanel:
+  Installed: 0.10.1-2+rpt22
+pcmanfm:
+  Installed: 1.3.2-1+rpt30
+rpd-plym-splash:
+  Installed: 0.43
+
+Networking Information
+----------------------
+
+eth0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether m.m.m.m  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet x.x.x.x  netmask x.x.x.x
+        inet6 ::1  prefixlen 128  scopeid 0x10<host>
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 17  bytes 2562 (2.5 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 17  bytes 2562 (2.5 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+wlan0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet x.x.x.x  netmask x.x.x.x  broadcast x.x.x.x
+        inet6 y.y.y.y.y.y.y.y  prefixlen 64  scopeid 0x0<global>
+        inet6 y::y.y.y.y  prefixlen 64  scopeid 0x20<link>
+        ether m.m.m.m  txqueuelen 1000  (Ethernet)
+        RX packets 3649  bytes 2513191 (2.3 MiB)
+        RX errors 0  dropped 1  overruns 0  frame 0
+        TX packets 1471  bytes 189251 (184.8 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+
+USB Information
+---------------
+
+/:  Bus 02.Port 1: Dev 1, Class=root_hub, Driver=xhci_hcd/4p, 5000M
+/:  Bus 01.Port 1: Dev 1, Class=root_hub, Driver=xhci_hcd/1p, 480M
+    |__ Port 1: Dev 2, If 0, Class=Hub, Driver=hub/4p, 480M
+        |__ Port 2: Dev 3, If 3, Class=Audio, Driver=snd-usb-audio, 480M
+        |__ Port 2: Dev 3, If 1, Class=Video, Driver=uvcvideo, 480M
+        |__ Port 2: Dev 3, If 2, Class=Audio, Driver=snd-usb-audio, 480M
+        |__ Port 2: Dev 3, If 0, Class=Video, Driver=uvcvideo, 480M
+        |__ Port 3: Dev 4, If 0, Class=Hub, Driver=hub/4p, 480M
+            |__ Port 2: Dev 7, If 0, Class=Human Interface Device, Driver=usbhid, 12M
+            |__ Port 2: Dev 7, If 1, Class=Human Interface Device, Driver=usbhid, 12M
+
+Display Information
+-------------------
+
+Running (F)KMS and X
+
+Screen 0: minimum 16 x 16, current 1920 x 1080, maximum 32767 x 32767
+XWAYLAND0 connected 1920x1080+0+0 (0x23) normal (normal left inverted right x axis y axis) 1210mm x 680mm
+	Identifier: 0x21
+	Timestamp:  664012
+	Subpixel:   unknown
+	Gamma:      1.0:1.0:1.0
+	Brightness: 0.0
+	Clones:    
+	CRTC:       0
+	CRTCs:      0
+	Transform:  1.000000 0.000000 0.000000
+	            0.000000 1.000000 0.000000
+	            0.000000 0.000000 1.000000
+	           filter: 
+	RANDR Emulation: 1 
+	non-desktop: 0 
+		supported: 0, 1
+  1920x1080 (0x23) 173.000MHz -HSync +VSync *current +preferred
+        h: width  1920 start 2048 end 2248 total 2576 skew    0 clock  67.16KHz
+        v: height 1080 start 1083 end 1088 total 1120           clock  59.96Hz
+  1440x1080 (0x24) 129.000MHz -HSync +VSync
+        h: width  1440 start 1528 end 1680 total 1920 skew    0 clock  67.19KHz
+        v: height 1080 start 1083 end 1087 total 1120           clock  59.99Hz
+  1400x1050 (0x25) 121.750MHz -HSync +VSync
+        h: width  1400 start 1488 end 1632 total 1864 skew    0 clock  65.32KHz
+        v: height 1050 start 1053 end 1057 total 1089           clock  59.98Hz
+  1280x1024 (0x26) 109.000MHz -HSync +VSync
+        h: width  1280 start 1368 end 1496 total 1712 skew    0 clock  63.67KHz
+        v: height 1024 start 1027 end 1034 total 1063           clock  59.89Hz
+  1280x960 (0x27) 101.250MHz -HSync +VSync
+        h: width  1280 start 1360 end 1488 total 1696 skew    0 clock  59.70KHz
+        v: height  960 start  963 end  967 total  996           clock  59.94Hz
+  1152x864 (0x28) 81.750MHz -HSync +VSync
+        h: width  1152 start 1216 end 1336 total 1520 skew    0 clock  53.78KHz
+        v: height  864 start  867 end  871 total  897           clock  59.96Hz
+  1024x768 (0x29) 63.500MHz -HSync +VSync
+        h: width  1024 start 1072 end 1176 total 1328 skew    0 clock  47.82KHz
+        v: height  768 start  771 end  775 total  798           clock  59.92Hz
+  800x600 (0x2a) 38.250MHz -HSync +VSync
+        h: width   800 start  832 end  912 total 1024 skew    0 clock  37.35KHz
+        v: height  600 start  603 end  607 total  624           clock  59.86Hz
+  640x480 (0x2b) 23.750MHz -HSync +VSync
+        h: width   640 start  664 end  720 total  800 skew    0 clock  29.69KHz
+        v: height  480 start  483 end  487 total  500           clock  59.38Hz
+  320x240 (0x2c)  6.000MHz -HSync +VSync
+        h: width   320 start  336 end  360 total  400 skew    0 clock  15.00KHz
+        v: height  240 start  243 end  247 total  252           clock  59.52Hz
+  1680x1050 (0x2d) 146.250MHz -HSync +VSync
+        h: width  1680 start 1784 end 1960 total 2240 skew    0 clock  65.29KHz
+        v: height 1050 start 1053 end 1059 total 1089           clock  59.95Hz
+  1440x900 (0x2e) 106.500MHz -HSync +VSync
+        h: width  1440 start 1528 end 1672 total 1904 skew    0 clock  55.93KHz
+        v: height  900 start  903 end  909 total  934           clock  59.89Hz
+  1280x800 (0x2f) 83.500MHz -HSync +VSync
+        h: width  1280 start 1352 end 1480 total 1680 skew    0 clock  49.70KHz
+        v: height  800 start  803 end  809 total  831           clock  59.81Hz
+  720x480 (0x30) 26.750MHz -HSync +VSync
+        h: width   720 start  744 end  808 total  896 skew    0 clock  29.85KHz
+        v: height  480 start  483 end  493 total  500           clock  59.71Hz
+  640x400 (0x31) 20.000MHz -HSync +VSync
+        h: width   640 start  664 end  720 total  800 skew    0 clock  25.00KHz
+        v: height  400 start  403 end  409 total  417           clock  59.95Hz
+  320x200 (0x32)  5.000MHz -HSync +VSync
+        h: width   320 start  336 end  360 total  400 skew    0 clock  12.50KHz
+        v: height  200 start  203 end  209 total  212           clock  58.96Hz
+  1600x900 (0x33) 118.250MHz -HSync +VSync
+        h: width  1600 start 1696 end 1856 total 2112 skew    0 clock  55.99KHz
+        v: height  900 start  903 end  908 total  934           clock  59.95Hz
+  1368x768 (0x34) 85.250MHz -HSync +VSync
+        h: width  1368 start 1440 end 1576 total 1784 skew    0 clock  47.79KHz
+        v: height  768 start  771 end  781 total  798           clock  59.88Hz
+  1280x720 (0x35) 74.500MHz -HSync +VSync
+        h: width  1280 start 1344 end 1472 total 1664 skew    0 clock  44.77KHz
+        v: height  720 start  723 end  728 total  748           clock  59.86Hz
+  1024x576 (0x36) 46.500MHz -HSync +VSync
+        h: width  1024 start 1064 end 1160 total 1296 skew    0 clock  35.88KHz
+        v: height  576 start  579 end  584 total  599           clock  59.90Hz
+  864x486 (0x37) 32.500MHz -HSync +VSync
+        h: width   864 start  888 end  968 total 1072 skew    0 clock  30.32KHz
+        v: height  486 start  489 end  494 total  506           clock  59.92Hz
+  720x400 (0x38) 22.250MHz -HSync +VSync
+        h: width   720 start  744 end  808 total  896 skew    0 clock  24.83KHz
+        v: height  400 start  403 end  413 total  417           clock  59.55Hz
+  640x350 (0x39) 17.500MHz -HSync +VSync
+        h: width   640 start  664 end  720 total  800 skew    0 clock  21.88KHz
+        v: height  350 start  353 end  363 total  366           clock  59.77Hz
+
+Connector 0 (33) HDMI-A-1 (connected)
+  Encoder 0 (32) TMDS
+    Crtc 3 (100) 1920x1080@60.00 148.500 1920/88/44/148/+ 1080/4/5/36/+ 60 (60.00) P|D 
+      Plane 3 (89) fb-id: 721 (crtcs: 3) 0,0 1920x1080 -> 0,0 1920x1080 (XR24 AR24 AB24 XB24 RG16 BG16 AR15 XR15 RG24 BG24 YU16 YV16 YU24 YV24 YU12 YV12 NV12 NV21 NV16 NV61 P030 XR30 AR30 AB30 XB30 RGB8 BGR8 XR12 AR12 XB12 AB12 BX12 BA12 RX12 RA12)
+        FB 721 1920x1080 XR24
+      Plane 57 (686) fb-id: 725 (crtcs: 3) 0,0 64x64 -> 821,687 64x64 (XR24 AR24 AB24 XB24 RG16 BG16 AR15 XR15 RG24 BG24 YU16 YV16 YU24 YV24 YU12 YV12 NV12 NV21 NV16 NV61 P030 XR30 AR30 AB30 XB30 RGB8 BGR8 XR12 AR12 XB12 AB12 BX12 BA12 RX12 RA12)
+        FB 725 64x64 AR24
+Connector 1 (42) HDMI-A-2 (disconnected)
+  Encoder 1 (41) TMDS
+
+Connector 0 (33) HDMI-A-1 (connected)
+   0 1920x1080@60.00  148.500 1920/88/44/148/+   1080/4/5/36/+      60 (60.00) P|D   
+   1 1920x1080@60.00  148.500 1920/88/44/148/+   1080/4/5/36/+      60 (60.00) D     16:9
+   2 1920x1080@59.94  148.352 1920/88/44/148/+   1080/4/5/36/+      60 (59.94) D     16:9
+   3 1920x1080i@60.00  74.250 1920/88/44/148/+   1080/4/10/31/+     60 (60.00) D     
+   4 1920x1080i@60.00  74.250 1920/88/44/148/+   1080/4/10/31/+     60 (60.00) D     16:9
+   5 1920x1080i@59.94  74.176 1920/88/44/148/+   1080/4/10/31/+     60 (59.94) D     16:9
+   6 1920x1080@30.00   74.250 1920/88/44/148/+   1080/4/5/36/+      30 (30.00) D     16:9
+   7 1920x1080@29.97   74.176 1920/88/44/148/+   1080/4/5/36/+      30 (29.97) D     16:9
+   8 1920x1080@24.00   74.250 1920/638/44/148/+  1080/4/5/36/+      24 (24.00) D     16:9
+   9 1920x1080@23.98   74.176 1920/638/44/148/+  1080/4/5/36/+      24 (23.98) D     16:9
+  10 1600x1200@60.00  162.000 1600/64/192/304/+  1200/1/3/46/+      60 (60.00) D     
+  11 1680x1050@59.88  119.000 1680/48/32/80/+    1050/3/6/21/-      60 (59.88) D     
+  12 1280x1024@75.02  135.000 1280/16/144/248/+  1024/1/3/38/+      75 (75.02) D     
+  13 1280x1024@60.02  108.000 1280/48/112/248/+  1024/1/3/38/+      60 (60.02) D     
+  14 1440x900@74.98   136.750 1440/96/152/248/-  900/3/6/33/+       75 (74.98) D     
+  15 1440x900@59.90    88.750 1440/48/32/80/+    900/3/6/17/-       60 (59.90) D     
+  16 1280x960@60.00   108.000 1280/96/112/312/+  960/1/3/36/+       60 (60.00) D     
+  17 1360x768@60.02    85.500 1360/64/112/256/+  768/3/6/18/+       60 (60.02) D     
+  18 1280x800@59.91    71.000 1280/48/32/80/+    800/3/6/14/-       60 (59.91) D     
+  19 1152x864@75.00   108.000 1152/64/128/256/+  864/1/3/32/+       75 (75.00) D     
+  20 1280x720@60.00    74.250 1280/110/40/220/+  720/5/5/20/+       60 (60.00) D     
+  21 1280x720@60.00    74.250 1280/110/40/220/+  720/5/5/20/+       60 (60.00) D     16:9
+  22 1280x720@59.94    74.176 1280/110/40/220/+  720/5/5/20/+       60 (59.94) D     16:9
+  23 1024x768@75.03    78.750 1024/16/96/176/+   768/1/3/28/+       75 (75.03) D     
+  24 1024x768@70.07    75.000 1024/24/136/144/-  768/3/6/29/-       70 (70.07) D     
+  25 1024x768@60.00    65.000 1024/24/136/160/-  768/3/6/29/-       60 (60.00) D     
+  26 832x624@74.55     57.284 832/32/64/224/-    624/1/3/39/-       75 (74.55) D     
+  27 800x600@75.00     49.500 800/16/80/160/+    600/1/3/21/+       75 (75.00) D     
+  28 800x600@72.19     50.000 800/56/120/64/+    600/37/6/23/+      72 (72.19) D     
+  29 800x600@60.32     40.000 800/40/128/88/+    600/1/4/23/+       60 (60.32) D     
+  30 720x480@60.00     27.027 720/16/62/60/-     480/9/6/30/-       60 (60.00) D     4:3
+  31 720x480@60.00     27.027 720/16/62/60/-     480/9/6/30/-       60 (60.00) D     16:9
+  32 720x480@59.94     27.000 720/16/62/60/-     480/9/6/30/-       60 (59.94) D     
+  33 720x480@59.94     27.000 720/16/62/60/-     480/9/6/30/-       60 (59.94) D     16:9
+  34 640x480@75.00     31.500 640/16/64/120/-    480/1/3/16/-       75 (75.00) D     
+  35 640x480@72.81     31.500 640/24/40/128/-    480/9/3/28/-       73 (72.81) D     
+  36 640x480@66.67     30.240 640/64/64/96/-     480/3/3/39/-       67 (66.67) D     
+  37 640x480@60.00     25.200 640/16/96/48/-     480/10/2/33/-      60 (60.00) D     4:3
+  38 640x480@59.94     25.175 640/16/96/48/-     480/10/2/33/-      60 (59.94) D     
+  39 720x400@70.08     28.320 720/18/108/54/-    400/12/2/35/+      70 (70.08) D     
+
+HDMI0:             HDMI_HOTPLUG = 0x00000001
+HDMI1:             HDMI_HOTPLUG = 0x00000000
+
+/sys/kernel/debug/dri/1/state:
+plane[46]: plane-0
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=0
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[65]: plane-1
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=0
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[77]: plane-2
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=0
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[89]: plane-3
+	crtc=pixelvalve-2
+	fb=721
+		allocated by = labwc
+		refcount=2
+		format=XR24 little-endian (0x34325258)
+		modifier=0x0
+		size=1920x1080
+		layers:
+			size[0]=1920x1080
+			pitch[0]=7680
+			offset[0]=0
+			obj[0]:
+				name=0
+				refcount=3
+				start=00100bdf
+				size=8294400
+				imported=no
+				dma_addr=0x00000000d0400000
+				vaddr=000000000d874098
+	crtc-pos=1920x1080+0+0
+	src-pos=1920.000000x1080.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=0
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[101]: plane-4
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=0
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[113]: plane-5
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=0
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[125]: plane-6
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=1
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[136]: plane-7
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=2
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[147]: plane-8
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=3
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[158]: plane-9
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=4
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[169]: plane-10
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=5
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[180]: plane-11
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=6
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[191]: plane-12
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=7
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[202]: plane-13
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=8
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[213]: plane-14
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=9
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[224]: plane-15
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=a
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[235]: plane-16
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=b
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[246]: plane-17
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=c
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[257]: plane-18
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=d
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[268]: plane-19
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=e
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[279]: plane-20
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=f
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[290]: plane-21
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=10
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[301]: plane-22
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=1
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[312]: plane-23
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=2
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[323]: plane-24
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=3
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[334]: plane-25
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=4
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[345]: plane-26
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=5
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[356]: plane-27
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=6
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[367]: plane-28
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=7
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[378]: plane-29
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=8
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[389]: plane-30
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=9
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[400]: plane-31
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=a
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[411]: plane-32
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=b
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[422]: plane-33
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=c
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[433]: plane-34
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=d
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[444]: plane-35
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=e
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[455]: plane-36
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=f
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[466]: plane-37
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=10
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[477]: plane-38
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=11
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[488]: plane-39
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=12
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[499]: plane-40
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=13
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[510]: plane-41
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=14
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[521]: plane-42
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=15
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[532]: plane-43
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=16
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[543]: plane-44
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=17
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[554]: plane-45
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=18
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[565]: plane-46
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=19
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[576]: plane-47
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=1a
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[587]: plane-48
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=1b
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[598]: plane-49
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=1c
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[609]: plane-50
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=1d
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[620]: plane-51
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=1e
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[631]: plane-52
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=1f
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[642]: plane-53
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=20
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[653]: plane-54
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=11
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[664]: plane-55
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=11
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[675]: plane-56
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=11
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[686]: plane-57
+	crtc=pixelvalve-2
+	fb=725
+		allocated by = labwc
+		refcount=2
+		format=AR24 little-endian (0x34325241)
+		modifier=0x0
+		size=64x64
+		layers:
+			size[0]=64x64
+			pitch[0]=256
+			offset[0]=0
+			obj[0]:
+				name=0
+				refcount=3
+				start=00100004
+				size=16384
+				imported=no
+				dma_addr=0x00000000ce0c8000
+				vaddr=00000000dae9f5d2
+	crtc-pos=64x64+821+687
+	src-pos=64.000000x64.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=1
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[697]: plane-58
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=11
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+plane[708]: plane-59
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=11
+	color-encoding=ITU-R BT.709 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+crtc[57]: txp
+	enable=0
+	active=0
+	self_refresh_active=0
+	planes_changed=0
+	mode_changed=0
+	active_changed=0
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=0
+	connector_mask=0
+	encoder_mask=0
+	mode: "": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+crtc[76]: pixelvalve-0
+	enable=0
+	active=0
+	self_refresh_active=0
+	planes_changed=0
+	mode_changed=0
+	active_changed=0
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=0
+	connector_mask=0
+	encoder_mask=0
+	mode: "": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+crtc[88]: pixelvalve-1
+	enable=0
+	active=0
+	self_refresh_active=0
+	planes_changed=0
+	mode_changed=0
+	active_changed=0
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=0
+	connector_mask=0
+	encoder_mask=0
+	mode: "": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+crtc[100]: pixelvalve-2
+	enable=1
+	active=1
+	self_refresh_active=0
+	planes_changed=1
+	mode_changed=0
+	active_changed=0
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=200000000000008
+	connector_mask=1
+	encoder_mask=1
+	mode: "1920x1080": 60 148500 1920 2008 2052 2200 1080 1084 1089 1125 0x48 0x5
+crtc[112]: pixelvalve-4
+	enable=0
+	active=0
+	self_refresh_active=0
+	planes_changed=0
+	mode_changed=0
+	active_changed=0
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=0
+	connector_mask=0
+	encoder_mask=0
+	mode: "": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+crtc[124]: pixelvalve-3
+	enable=0
+	active=0
+	self_refresh_active=0
+	planes_changed=0
+	mode_changed=0
+	active_changed=0
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=0
+	connector_mask=0
+	encoder_mask=0
+	mode: "": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+connector[33]: HDMI-A-1
+	crtc=pixelvalve-2
+	self_refresh_aware=0
+	max_requested_bpc=8
+	colorspace=Default
+	broadcast_rgb=Automatic
+	is_limited_range=y
+	output_bpc=8
+	output_format=RGB
+	tmds_char_rate=148500000
+connector[42]: HDMI-A-2
+	crtc=(null)
+	self_refresh_aware=0
+	max_requested_bpc=8
+	colorspace=Default
+	broadcast_rgb=Automatic
+	is_limited_range=n
+	output_bpc=0
+	output_format=RGB
+	tmds_char_rate=0
+connector[63]: Writeback-1
+	crtc=(null)
+	self_refresh_aware=0
+	max_requested_bpc=0
+	colorspace=Default
+HVS State
+	Core Clock Rate: 137600000
+	Channel 0
+		in use=1
+		load=137600000
+	Channel 1
+		in use=0
+		load=0
+	Channel 2
+		in use=0
+		load=0
+
+
+
+Audio Information
+-------------------
+
+**** List of PLAYBACK Hardware Devices ****
+card 0: vc4hdmi0 [vc4-hdmi-0], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
+  Subdevices: 1/1
+  Subdevice #0: subdevice #0
+card 1: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
+  Subdevices: 1/1
+  Subdevice #0: subdevice #0
+card 2: Headphones [bcm2835 Headphones], device 0: bcm2835 Headphones [bcm2835 Headphones]
+  Subdevices: 8/8
+  Subdevice #0: subdevice #0
+  Subdevice #1: subdevice #1
+  Subdevice #2: subdevice #2
+  Subdevice #3: subdevice #3
+  Subdevice #4: subdevice #4
+  Subdevice #5: subdevice #5
+  Subdevice #6: subdevice #6
+  Subdevice #7: subdevice #7
+
+null
+    Discard all samples (playback) or generate zero samples (capture)
+default
+    Playback/recording through the PulseAudio sound server
+sysdefault
+    Default Audio Device
+lavrate
+    Rate Converter Plugin Using Libav/FFmpeg Library
+samplerate
+    Rate Converter Plugin Using Samplerate Library
+speexrate
+    Rate Converter Plugin Using Speex Resampler
+jack
+    JACK Audio Connection Kit
+oss
+    Open Sound System
+pulse
+    PulseAudio Sound Server
+speex
+    Plugin using Speex DSP (resample, agc, denoise, echo, dereverb)
+upmix
+    Plugin for channel upmix (4,6,8)
+vdownmix
+    Plugin for channel downmix (stereo) with a simple spacialization
+hw:CARD=vc4hdmi0,DEV=0
+    vc4-hdmi-0, MAI PCM i2s-hifi-0
+    Direct hardware device without any conversions
+plughw:CARD=vc4hdmi0,DEV=0
+    vc4-hdmi-0, MAI PCM i2s-hifi-0
+    Hardware device with all software conversions
+sysdefault:CARD=vc4hdmi0
+    vc4-hdmi-0, MAI PCM i2s-hifi-0
+    Default Audio Device
+hdmi:CARD=vc4hdmi0,DEV=0
+    vc4-hdmi-0, MAI PCM i2s-hifi-0
+    HDMI Audio Output
+dmix:CARD=vc4hdmi0,DEV=0
+    vc4-hdmi-0, MAI PCM i2s-hifi-0
+    Direct sample mixing device
+usbstream:CARD=vc4hdmi0
+    vc4-hdmi-0
+    USB Stream Output
+hw:CARD=vc4hdmi1,DEV=0
+    vc4-hdmi-1, MAI PCM i2s-hifi-0
+    Direct hardware device without any conversions
+plughw:CARD=vc4hdmi1,DEV=0
+    vc4-hdmi-1, MAI PCM i2s-hifi-0
+    Hardware device with all software conversions
+sysdefault:CARD=vc4hdmi1
+    vc4-hdmi-1, MAI PCM i2s-hifi-0
+    Default Audio Device
+hdmi:CARD=vc4hdmi1,DEV=0
+    vc4-hdmi-1, MAI PCM i2s-hifi-0
+    HDMI Audio Output
+dmix:CARD=vc4hdmi1,DEV=0
+    vc4-hdmi-1, MAI PCM i2s-hifi-0
+    Direct sample mixing device
+usbstream:CARD=vc4hdmi1
+    vc4-hdmi-1
+    USB Stream Output
+hw:CARD=Headphones,DEV=0
+    bcm2835 Headphones, bcm2835 Headphones
+    Direct hardware device without any conversions
+plughw:CARD=Headphones,DEV=0
+    bcm2835 Headphones, bcm2835 Headphones
+    Hardware device with all software conversions
+sysdefault:CARD=Headphones
+    bcm2835 Headphones, bcm2835 Headphones
+    Default Audio Device
+dmix:CARD=Headphones,DEV=0
+    bcm2835 Headphones, bcm2835 Headphones
+    Direct sample mixing device
+usbstream:CARD=Headphones
+    bcm2835 Headphones
+    USB Stream Output
+usbstream:CARD=Arducam8mp
+    Arducam_8mp
+    USB Stream Output
+
+● pipewire.socket - PipeWire Multimedia System Sockets
+     Loaded: loaded (/usr/lib/systemd/user/pipewire.socket; enabled; preset: enabled)
+     Active: active (running) since Mon 2026-03-02 15:27:20 PST; 12min ago
+   Triggers: ● pipewire.service
+     Listen: /run/user/1000/pipewire-0 (Stream)
+             /run/user/1000/pipewire-0-manager (Stream)
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/pipewire.socket
+
+Mar 02 15:27:20 MPCNC systemd[947]: Listening on pipewire.socket - PipeWire Multimedia System Sockets.
+
+● pipewire.service - PipeWire Multimedia Service
+     Loaded: loaded (/usr/lib/systemd/user/pipewire.service; enabled; preset: enabled)
+     Active: active (running) since Mon 2026-03-02 15:27:20 PST; 12min ago
+TriggeredBy: ● pipewire.socket
+   Main PID: 965 (pipewire)
+      Tasks: 6 (limit: 3914)
+        CPU: 239ms
+     CGroup: /user.slice/user-1000.slice/user@1000.service/session.slice/pipewire.service
+             └─965 /usr/bin/pipewire
+
+Mar 02 15:27:20 MPCNC systemd[947]: Started pipewire.service - PipeWire Multimedia Service.
+Mar 02 15:27:25 MPCNC pipewire[965]: [0:00:22.454006022] [965]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+Mar 02 15:27:25 MPCNC pipewire[965]: [0:00:22.495250522] [1266]  INFO Camera camera_manager.cpp:220 Adding camera '/base/scb/pcie@7d500000/pci@0,0/usb@0,0-1.2:1.0-0c45:6366' for pipeline handler uvcvideo
+
+○ pulseaudio.service - Sound Service
+     Loaded: loaded (/usr/lib/systemd/user/pulseaudio.service; enabled; preset: enabled)
+     Active: inactive (dead)
+TriggeredBy: ○ pulseaudio.socket
+
+○ pulseaudio.socket - Sound System
+     Loaded: loaded (/usr/lib/systemd/user/pulseaudio.socket; enabled; preset: enabled)
+     Active: inactive (dead)
+   Triggers: ● pulseaudio.service
+     Listen: /run/user/1000/pulse/native (Stream)
+
+Server String: /run/user/1000/pulse/native
+Library Protocol Version: 35
+Server Protocol Version: 35
+Is Local: yes
+Client Index: 91
+Tile Size: 65472
+User Name: kad
+Host Name: MPCNC
+Server Name: PulseAudio (on PipeWire 1.2.7)
+Server Version: 15.0.0
+Default Sample Specification: float32le 2ch 48000Hz
+Default Channel Map: front-left,front-right
+Default Sink: alsa_output.platform-fe00b840.mailbox.stereo-fallback
+Default Source: alsa_input.usb-Arducam_Technology_Co.__Ltd._Arducam_8mp_SN0001-02.analog-stereo
+Cookie: a903:0d41
+
+config.txt
+----------
+
+arm_64bit=1
+arm_boost=1
+arm_freq=1500
+audio_pwm_mode=514
+auto_initramfs=1
+camera_auto_detect=1
+config_hdmi_boost=5
+core_freq=500
+core_freq_min=200
+disable_commandline_tags=2
+disable_fw_kms_setup=1
+disable_l2cache=1
+disable_overscan=1
+display_auto_detect=1
+display_hdmi_rotate=-1
+display_lcd_rotate=-1
+dvfs=3
+enable_gic=1
+force_eeprom_read=1
+force_pwm_open=1
+framebuffer_ignore_alpha=1
+framebuffer_swap=1
+gpu_freq=500
+gpu_freq_min=250
+init_uart_clock=0x2dc6c00
+initial_turbo=60
+lcd_framerate=60
+mask_gpu_interrupt0=3072
+mask_gpu_interrupt1=25635
+max_framebuffers=2
+over_voltage_avs=-36250
+pause_burst_frames=1
+pciex4_reset=1
+pmic_turbo_threshold=600
+program_serial_random=1
+total_mem=4096
+hdmi_force_cec_address:0=65535
+hdmi_force_cec_address:1=65535
+hdmi_pixel_freq_limit:0=0x11e1a300
+hdmi_pixel_freq_limit:1=0x11e1a300
+device_tree=-
+overlay_prefix=overlays/
+hdmi_cvt:0=
+hdmi_cvt:1=
+hdmi_edid_filename:0=
+hdmi_edid_filename:1=
+hdmi_timings:0=
+hdmi_timings:1=
+
+cmdline.txt
+-----------
+coherent_pool=1M 8250.nr_uarts=0 snd_bcm2835.enable_headphones=0 cgroup_disable=memory numa_policy=interleave nvme.max_host_mem_size_mb=0 snd_bcm2835.enable_headphones=1 snd_bcm2835.enable_hdmi=1 snd_bcm2835.enable_hdmi=0  numa=fake=2 system_heap.max_order=0 smsc95xx.macaddr=DC:A6:32:09:1E:F4 vc_mem.mem_base=0x3ec00000 vc_mem.mem_size=0x40000000  console=ttyS0,115200 console=tty1 root=PARTUUID=ae564808-02 rootfstype=ext4 fsck.repair=yes lsm=apparmor rootwait quiet splash plymouth.ignore-serial-consoles cfg80211.ieee80211_regdom=US
+
+pin configuration
+-----------------
+
+ 0: ip    pu | hi // ID_SDA/GPIO0 = input
+ 1: ip    pu | hi // ID_SCL/GPIO1 = input
+ 2: a0    pu | hi // GPIO2 = SDA1
+ 3: a0    pu | hi // GPIO3 = SCL1
+ 4: ip    pu | hi // GPIO4 = input
+ 5: ip    pu | hi // GPIO5 = input
+ 6: ip    pu | hi // GPIO6 = input
+ 7: op -- pu | hi // GPIO7 = output
+ 8: op -- pu | hi // GPIO8 = output
+ 9: a0    pd | lo // GPIO9 = SPI0_MISO
+10: a0    pd | hi // GPIO10 = SPI0_MOSI
+11: a0    pd | lo // GPIO11 = SPI0_SCLK
+12: ip    pd | lo // GPIO12 = input
+13: ip    pd | lo // GPIO13 = input
+14: ip    pn | hi // GPIO14 = input
+15: ip    pu | hi // GPIO15 = input
+16: ip    pd | lo // GPIO16 = input
+17: ip    pd | lo // GPIO17 = input
+18: ip    pd | lo // GPIO18 = input
+19: ip    pd | lo // GPIO19 = input
+20: ip    pd | lo // GPIO20 = input
+21: ip    pd | lo // GPIO21 = input
+22: ip    pd | lo // GPIO22 = input
+23: ip    pd | lo // GPIO23 = input
+24: ip    pd | lo // GPIO24 = input
+25: ip    pd | lo // GPIO25 = input
+26: ip    pd | lo // GPIO26 = input
+27: ip    pd | lo // GPIO27 = input
+28: a5    pu | hi // RGMII_MDIO/GPIO28 = RGMII_MDIO
+29: a5    pd | lo // RGMIO_MDC/GPIO29 = RGMII_MDC
+30: a3    pu | lo // CTS0/GPIO30 = CTS0
+31: a3    pn | lo // RTS0/GPIO31 = RTS0
+32: a3    pn | hi // TXD0/GPIO32 = TXD0
+33: a3    pu | hi // RXD0/GPIO33 = RXD0
+34: a3    pn | lo // SD1_CLK/GPIO34 = SD1_CLK
+35: a3    pu | hi // SD1_CMD/GPIO35 = SD1_CMD
+36: a3    pu | hi // SD1_DATA0/GPIO36 = SD1_DAT0
+37: a3    pu | hi // SD1_DATA1/GPIO37 = SD1_DAT1
+38: a3    pu | hi // SD1_DATA2/GPIO38 = SD1_DAT2
+39: a3    pu | hi // SD1_DATA3/GPIO39 = SD1_DAT3
+40: a0    pn | lo // PWM0_MISO/GPIO40 = PWM1_0
+41: a0    pn | lo // PWM1_MOSI/GPIO41 = PWM1_1
+42: op -- pu | lo // STATUS_LED_G_CLK/GPIO42 = output
+43: ip    pu | hi // SPIFLASH_CE_N/GPIO43 = input
+44: ip    pu | hi // SDA0/GPIO44 = input
+45: ip    pu | hi // SCL0/GPIO45 = input
+46: ip    pu | lo // RGMII_RXCLK/GPIO46 = input
+47: ip    pu | lo // RGMII_RXCTL/GPIO47 = input
+48: ip    pd | lo // RGMII_RXD0/GPIO48 = input
+49: ip    pd | lo // RGMII_RXD1/GPIO49 = input
+50: ip    pd | lo // RGMII_RXD2/GPIO50 = input
+51: ip    pd | lo // RGMII_RXD3/GPIO51 = input
+52: ip    pd | lo // RGMII_TXCLK/GPIO52 = input
+53: ip    pd | lo // RGMII_TXCTL/GPIO53 = input
+54: ip    pd | lo // RGMII_TXD0/GPIO54 = input
+55: ip    pd | lo // RGMII_TXD1/GPIO55 = input
+56: ip    pd | lo // RGMII_TXD2/GPIO56 = input
+57: ip    pd | lo // RGMII_TXD3/GPIO57 = input
+100: op dh pn | hi // BT_ON/FWGPIO0 = output
+101: op dh pn | hi // WL_ON/FWGPIO1 = output
+102: op dh pn | hi // PWR_LED_OFF/FWGPIO2 = output
+103: op dl pn | lo // GLOBAL_RESET/FWGPIO3 = output
+104: op dh pn | hi // VDD_SD_IO_SEL/FWGPIO4 = output
+105: op dl pn | lo // CAM_GPIO/FWGPIO5 = output
+106: op dh pn | hi // SD_PWR_ON/FWGPIO6 = output
+107: ip    pn | lo // SD_OC_N/FWGPIO7 = input
+
+vcdbg log messages
+------------------
+
+004966.430: arasan: arasan_emmc_open
+004966.602: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+005071.383: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+005071.470: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+005090.201: boot-part: 1 fs-type: 0
+005090.212: boot-part: 1 fs-type: 3
+005090.349: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+005232.995: brfs: File read: /mfs/sd/config.txt
+005233.745: brfs: File read: 1246 bytes
+005315.999: HDMI1:EDID error reading EDID block 0 attempt 0
+005317.015: HDMI1:EDID giving up on reading EDID block 0
+005326.131: brfs: File read: /mfs/sd/config.txt
+006119.478: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+006120.235: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+006122.388: *** Restart logging
+006122.409: brfs: File read: 1246 bytes
+006188.537: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+006189.555: hdmi: HDMI1:EDID giving up on reading EDID block 0
+006194.595: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+006195.610: hdmi: HDMI1:EDID giving up on reading EDID block 0
+006195.629: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+006195.644: HDMI0: hdmi_pixel_encoding: 300000000
+006195.656: HDMI1: hdmi_pixel_encoding: 300000000
+009502.745: brfs: File read: /mfs/sd/initramfs8
+009502.777: Loaded 'initramfs8' to 0x0 size 0x113affa
+009529.528: initramfs (initramfs8) loaded to 0x2dec5000 (size 0x113affa)
+009539.319: dtb_file 'bcm2711-rpi-4-b.dtb'
+009539.352: brfs: File read: 18067450 bytes
+009552.183: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+009552.218: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbe1
+009586.511: brfs: File read: 56289 bytes
+009603.162: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+009664.297: brfs: File read: 5887 bytes
+009669.665: brfs: File read: /mfs/sd/config.txt
+009669.844: dtparam: spi=on
+009690.416: dtparam: audio=on
+009703.604: brfs: File read: 1246 bytes
+009727.082: brfs: File read: /mfs/sd/overlays/vc4-kms-v3d-pi4.dtbo
+009884.893: Loaded overlay 'vc4-kms-v3d-pi4'
+010306.280: brfs: File read: 3913 bytes
+010309.470: brfs: File read: /mfs/sd/cmdline.txt
+010309.571: Read command line from file 'cmdline.txt':
+010309.605: 'console=serial0,115200 console=tty1 root=PARTUUID=ae564808-02 rootfstype=ext4 fsck.repair=yes lsm=apparmor rootwait quiet splash plymouth.ignore-serial-consoles cfg80211.ieee80211_regdom=US'
+010683.185: brfs: File read: 189 bytes
+012619.859: brfs: File read: /mfs/sd/kernel8.img
+012619.898: Loaded 'kernel8.img' to 0x200000 size 0x981aa2
+016045.935: Device tree loaded to 0x2deb6d00 (size 0xe23b)
+016052.454: gpioman: gpioman_get_pin_num: pin SDCARD_CONTROL_POWER not defined
+016052.617: Watchdog stopped
+016052.630: arm_loader: Starting ARM with 948MB
+016157.110: sdram: sdram refresh 1562->3124 (2)
+017563.629: vchiq_core: vchiq_init_state: slot_zero = 0xce080000, is_master = 1
+017570.035: TV service:host side not connected, dropping notification 0x00000002, 0x00000001, 0x00000010
+038915.627: mmal: mmal_vll_load: could not load VLL 'videnc.vll': 
+
+dmesg log
+---------
+
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd083]
+[    0.000000] Linux version 6.12.47+rpt-rpi-v8 (serge@raspberrypi.com) (aarch64-linux-gnu-gcc-12 (Debian 12.2.0-14+deb12u1) 12.2.0, GNU ld (GNU Binutils for Debian) 2.40) #1 SMP PREEMPT Debian 1:6.12.47-1+rpt1~bookworm (2025-09-16)
+[    0.000000] KASLR enabled
+[    0.000000] random: crng init done
+[    0.000000] Machine model: Raspberry Pi 4 Model B Rev 1.1
+[    0.000000] efi: UEFI not found.
+[    0.000000] Reserved memory: created CMA memory pool at 0x000000000dc00000, size 512 MiB
+[    0.000000] OF: reserved mem: initialized node linux,cma, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x000000000dc00000..0x000000002dbfffff (524288 KiB) map reusable linux,cma
+[    0.000000] OF: reserved mem: 0x000000003ef73340..0x000000003ef7372b (0 KiB) nomap non-reusable nvram@0
+[    0.000000] OF: reserved mem: 0x000000003ef73100..0x000000003ef732ff (0 KiB) nomap non-reusable nvram@1
+[    0.000000] NUMA: Faking a node at [mem 0x0000000000000000-0x00000000fbffffff]
+[    0.000000] Faking node 0 at [mem 0x0000000000000000-0x000000007fffffff] (2048MB)
+[    0.000000] Faking node 1 at [mem 0x0000000080000000-0x00000000fbffffff] (1984MB)
+[    0.000000] NUMA: Initialized distance table, cnt=2
+[    0.000000] NODE_DATA(0) allocated [mem 0x7fffd300-0x7fffffff]
+[    0.000000] NODE_DATA(1) allocated [mem 0xfb7f9300-0xfb7fbfff]
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000000000000-0x000000003fffffff]
+[    0.000000]   DMA32    [mem 0x0000000040000000-0x00000000fbffffff]
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x000000003b3fffff]
+[    0.000000]   node   0: [mem 0x0000000040000000-0x000000007fffffff]
+[    0.000000]   node   1: [mem 0x0000000080000000-0x00000000fbffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x000000007fffffff]
+[    0.000000] Initmem setup node 1 [mem 0x0000000080000000-0x00000000fbffffff]
+[    0.000000] On node 0, zone DMA32: 19456 pages in unavailable ranges
+[    0.000000] On node 1, zone DMA32: 16384 pages in unavailable ranges
+[    0.000000] percpu: Embedded 33 pages/cpu s95192 r8192 d31784 u135168
+[    0.000000] pcpu-alloc: s95192 r8192 d31784 u135168 alloc=33*4096
+[    0.000000] pcpu-alloc: [0] 0 [0] 1 [0] 2 [0] 3 
+[    0.000000] Detected PIPT I-cache on CPU0
+[    0.000000] CPU features: detected: Spectre-v2
+[    0.000000] CPU features: detected: Spectre-v3a
+[    0.000000] CPU features: detected: Spectre-v4
+[    0.000000] CPU features: detected: Spectre-BHB
+[    0.000000] CPU features: kernel page table isolation forced ON by KASLR
+[    0.000000] CPU features: detected: Kernel page table isolation (KPTI)
+[    0.000000] CPU features: detected: ARM erratum 1742098
+[    0.000000] CPU features: detected: ARM errata 1165522, 1319367, or 1530923
+[    0.000000] alternatives: applying boot alternatives
+[    0.000000] Kernel command line: coherent_pool=1M 8250.nr_uarts=0 snd_bcm2835.enable_headphones=0 cgroup_disable=memory numa_policy=interleave nvme.max_host_mem_size_mb=0 snd_bcm2835.enable_headphones=1 snd_bcm2835.enable_hdmi=1 snd_bcm2835.enable_hdmi=0  numa=fake=2 system_heap.max_order=0 smsc95xx.macaddr=m.m.m.m vc_mem.mem_base=0x3ec00000 vc_mem.mem_size=0x40000000  console=ttyS0,115200 console=tty1 root=PARTUUID=ae564808-02 rootfstype=ext4 fsck.repair=yes lsm=apparmor rootwait quiet splash plymouth.ignore-serial-consoles cfg80211.ieee80211_regdom=US
+[    0.000000] cgroup: Disabling memory control group subsystem
+[    0.000000] mempolicy: NUMA default policy overridden to 'interleave:0-1'
+[    0.000000] Unknown kernel command line parameters "splash", will be passed to user space.
+[    0.000000] Fallback order for Node 0: 0 1 
+[    0.000000] Fallback order for Node 1: 1 0 
+[    0.000000] Built 2 zonelists, mobility grouping on.  Total pages: 1012736
+[    0.000000] Policy zone: DMA32
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] software IO TLB: area num 4.
+[    0.000000] software IO TLB: mapped [mem 0x0000000037400000-0x000000003b400000] (64MB)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=4, Nodes=2
+[    0.000000] ftrace: allocating 45290 entries in 177 pages
+[    0.000000] ftrace: allocated 177 pages with 4 groups
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Rude variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] RCU Tasks: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.000000] RCU Tasks Rude: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.000000] RCU Tasks Trace: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GIC: Using split EOI/Deactivate mode
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timer(s) running at 54.00MHz (phys).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0xc743ce346, max_idle_ns: 440795203123 ns
+[    0.000000] sched_clock: 56 bits at 54MHz, resolution 18ns, wraps every 4398046511102ns
+[    0.000169] Console: colour dummy device 80x25
+[    0.000177] printk: legacy console [tty1] enabled
+[    0.000265] Calibrating delay loop (skipped), value calculated using timer frequency.. 108.00 BogoMIPS (lpj=216000)
+[    0.000275] pid_max: default: 32768 minimum: 301
+[    0.000334] LSM: initializing lsm=capability,apparmor
+[    0.000489] AppArmor: AppArmor initialized
+[    0.001894] Dentry cache hash table entries: 524288 (order: 10, 4194304 bytes, vmalloc hugepage)
+[    0.002988] Inode-cache hash table entries: 262144 (order: 9, 2097152 bytes, vmalloc)
+[    0.003078] Mount-cache hash table entries: 8192 (order: 4, 65536 bytes, vmalloc)
+[    0.003121] Mountpoint-cache hash table entries: 8192 (order: 4, 65536 bytes, vmalloc)
+[    0.004846] rcu: Hierarchical SRCU implementation.
+[    0.004859] rcu: 	Max phase no-delay instances is 1000.
+[    0.005007] Timer migration: 2 hierarchy levels; 8 children per group; 1 crossnode level
+[    0.005725] EFI services will not be available.
+[    0.005902] smp: Bringing up secondary CPUs ...
+[    0.006250] Detected PIPT I-cache on CPU1
+[    0.006324] CPU1: Booted secondary processor 0x0000000001 [0x410fd083]
+[    0.006714] Detected PIPT I-cache on CPU2
+[    0.006754] CPU2: Booted secondary processor 0x0000000002 [0x410fd083]
+[    0.007149] Detected PIPT I-cache on CPU3
+[    0.007190] CPU3: Booted secondary processor 0x0000000003 [0x410fd083]
+[    0.007242] smp: Brought up 2 nodes, 4 CPUs
+[    0.007252] SMP: Total of 4 processors activated.
+[    0.007255] CPU: All CPU(s) started at EL2
+[    0.007267] CPU features: detected: 32-bit EL0 Support
+[    0.007270] CPU features: detected: 32-bit EL1 Support
+[    0.007274] CPU features: detected: CRC32 instructions
+[    0.007308] alternatives: applying system-wide alternatives
+[    0.008289] Memory: 3324652K/4050944K available (14208K kernel code, 2406K rwdata, 4824K rodata, 5440K init, 577K bss, 186032K reserved, 524288K cma-reserved)
+[    0.008731] devtmpfs: initialized
+[    0.013323] Enabled cp15_barrier support
+[    0.013342] Enabled setend support
+[    0.013430] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.013447] futex hash table entries: 1024 (order: 4, 65536 bytes, vmalloc)
+[    0.022462] 2G module region forced by RANDOMIZE_MODULE_REGION_FULL
+[    0.022481] 0 pages in range for non-PLT usage
+[    0.022488] 517360 pages in range for PLT usage
+[    0.022688] pinctrl core: initialized pinctrl subsystem
+[    0.023037] DMI not present or invalid.
+[    0.025735] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.026451] DMA: preallocated 1024 KiB GFP_KERNEL pool for atomic allocations
+[    0.026561] DMA: preallocated 1024 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.026731] DMA: preallocated 1024 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.026760] audit: initializing netlink subsys (disabled)
+[    0.026900] audit: type=2000 audit(0.024:1): state=initialized audit_enabled=0 res=1
+[    0.027160] thermal_sys: Registered thermal governor 'step_wise'
+[    0.027182] cpuidle: using governor menu
+[    0.027301] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+[    0.027364] ASID allocator initialised with 32768 entries
+[    0.027826] Serial: AMBA PL011 UART driver
+[    0.030824] /soc/interrupt-controller@40041000: Fixed dependency cycle(s) with /soc/interrupt-controller@40041000
+[    0.031280] bcm2835-mbox fe00b880.mailbox: mailbox enabled
+[    0.040126] raspberrypi-firmware soc:firmware: Attached to firmware from 2025-08-20T17:02:31, variant start
+[    0.044135] raspberrypi-firmware soc:firmware: Firmware hash is cd866525580337c0aee4b25880e1f5f9f674fb24
+[    0.049713] /scb/pcie@7d500000: Fixed dependency cycle(s) with /scb/pcie@7d500000
+[    0.049824] /scb/pcie@7d500000: Fixed dependency cycle(s) with /scb/pcie@7d500000
+[    0.053082] bcm2835-dma fe007000.dma-controller: DMA legacy API manager, dmachans=0x1
+[    0.053860] iommu: Default domain type: Translated
+[    0.053865] iommu: DMA domain TLB invalidation policy: strict mode
+[    0.054786] SCSI subsystem initialized
+[    0.054880] usbcore: registered new interface driver usbfs
+[    0.054903] usbcore: registered new interface driver hub
+[    0.054922] usbcore: registered new device driver usb
+[    0.055126] pps_core: LinuxPPS API ver. 1 registered
+[    0.055130] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.055138] PTP clock support registered
+[    0.055777] vgaarb: loaded
+[    0.056044] clocksource: Switched to clocksource arch_sys_counter
+[    0.529745] VFS: Disk quotas dquot_6.6.0
+[    0.529771] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    0.530034] AppArmor: AppArmor Filesystem Enabled
+[    0.534521] NET: Registered PF_INET protocol family
+[    0.535020] IP idents hash table entries: 65536 (order: 7, 524288 bytes, vmalloc)
+[    0.537092] tcp_listen_portaddr_hash hash table entries: 2048 (order: 3, 32768 bytes, vmalloc)
+[    0.537139] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, vmalloc)
+[    0.537156] TCP established hash table entries: 32768 (order: 6, 262144 bytes, vmalloc)
+[    0.537338] TCP bind hash table entries: 32768 (order: 8, 1048576 bytes, vmalloc)
+[    0.537946] TCP: Hash tables configured (established 32768 bind 32768)
+[    0.538228] MPTCP token hash table entries: 4096 (order: 4, 98304 bytes, vmalloc)
+[    0.538314] UDP hash table entries: 2048 (order: 4, 65536 bytes, vmalloc)
+[    0.538347] UDP-Lite hash table entries: 2048 (order: 4, 65536 bytes, vmalloc)
+[    0.538483] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.538901] RPC: Registered named UNIX socket transport module.
+[    0.538907] RPC: Registered udp transport module.
+[    0.538910] RPC: Registered tcp transport module.
+[    0.538913] RPC: Registered tcp-with-tls transport module.
+[    0.538916] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.538927] PCI: CLS 0 bytes, default 64
+[    0.539185] Trying to unpack rootfs image as initramfs...
+[    0.542873] kvm [1]: nv: 554 coarse grained trap handlers
+[    0.543135] kvm [1]: IPA Size Limit: 44 bits
+[    0.543781] kvm [1]: vgic interrupt IRQ9
+[    0.543812] kvm [1]: Hyp nVHE mode initialized successfully
+[    0.544977] Initialise system trusted keyrings
+[    0.545363] workingset: timestamp_bits=42 max_order=20 bucket_order=0
+[    0.546022] NFS: Registering the id_resolver key type
+[    0.546058] Key type id_resolver registered
+[    0.546062] Key type id_legacy registered
+[    0.546079] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    0.546083] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[    0.546556] Key type asymmetric registered
+[    0.546576] Asymmetric key parser 'x509' registered
+[    0.546621] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 247)
+[    0.546800] io scheduler mq-deadline registered
+[    0.546811] io scheduler kyber registered
+[    0.546846] io scheduler bfq registered
+[    0.547421] irq_brcmstb_l2: registered L2 intc (/soc/interrupt-controller@7ef00100, parent irq: 23)
+[    0.549590] pinctrl-bcm2835 fe200000.gpio: GPIO_OUT persistence: yes
+[    0.936904] Freeing initrd memory: 17640K
+[    0.940639] ledtrig-cpu: registered to indicate activity on CPUs
+[    0.942083] brcm-pcie fd500000.pcie: host bridge /scb/pcie@7d500000 ranges:
+[    0.942116] brcm-pcie fd500000.pcie:   No bus range found for /scb/pcie@7d500000, using [bus 00-ff]
+[    0.942138] brcm-pcie fd500000.pcie:      MEM 0x0600000000..0x063fffffff -> 0x00c0000000
+[    0.942156] brcm-pcie fd500000.pcie:   IB MEM 0x0000000000..0x00bfffffff -> 0x0400000000
+[    0.943406] brcm-pcie fd500000.pcie: PCI host bridge to bus 0000:00
+[    0.943442] pci_bus 0000:00: root bus resource [bus 00-ff]
+[    0.943450] pci_bus 0000:00: root bus resource [mem 0x600000000-0x63fffffff] (bus address [0xc0000000-0xffffffff])
+[    0.943534] pci 0000:00:00.0: [14e4:2711] type 01 class 0x060400 PCIe Root Port
+[    0.943555] pci 0000:00:00.0: PCI bridge to [bus 00]
+[    0.943564] pci 0000:00:00.0:   bridge window [mem 0x80000000-0xbfffffff]
+[    0.943623] pci 0000:00:00.0: PME# supported from D0 D3hot
+[    0.945518] pci 0000:00:00.0: bridge configuration invalid ([bus 00-00]), reconfiguring
+[    0.945653] pci_bus 0000:01: supply vpcie3v3 not found, using dummy regulator
+[    0.945740] pci_bus 0000:01: supply vpcie3v3aux not found, using dummy regulator
+[    0.945765] pci_bus 0000:01: supply vpcie12v not found, using dummy regulator
+[    1.048060] brcm-pcie fd500000.pcie: clkreq-mode set to default
+[    1.050127] brcm-pcie fd500000.pcie: link up, 5.0 GT/s PCIe x1 (SSC)
+[    1.050260] pci 0000:01:00.0: [1106:3483] type 00 class 0x0c0330 PCIe Endpoint
+[    1.050316] pci 0000:01:00.0: BAR 0 [mem 0x00000000-0x00000fff 64bit]
+[    1.050411] pci 0000:01:00.0: ASPM: VL805 fixup applied
+[    1.050493] pci 0000:01:00.0: PME# supported from D0 D3cold
+[    1.056103] pci_bus 0000:01: busn_res: [bus 01-ff] end is updated to 01
+[    1.056126] pci 0000:00:00.0: bridge window [mem 0x600000000-0x6000fffff]: assigned
+[    1.056134] pci 0000:01:00.0: BAR 0 [mem 0x600000000-0x600000fff 64bit]: assigned
+[    1.056178] pci 0000:00:00.0: PCI bridge to [bus 01]
+[    1.056184] pci 0000:00:00.0:   bridge window [mem 0x600000000-0x6000fffff]
+[    1.056191] pci_bus 0000:00: resource 4 [mem 0x600000000-0x63fffffff]
+[    1.056196] pci_bus 0000:01: resource 1 [mem 0x600000000-0x6000fffff]
+[    1.056341] pcieport 0000:00:00.0: enabling device (0000 -> 0002)
+[    1.056417] pcieport 0000:00:00.0: PME: Signaling with IRQ 27
+[    1.056617] pcieport 0000:00:00.0: AER: enabled with IRQ 27
+[    1.057085] simple-framebuffer 3e3cf000.framebuffer: framebuffer at 0x3e3cf000, 0x7f8000 bytes
+[    1.057092] simple-framebuffer 3e3cf000.framebuffer: format=a8r8g8b8, mode=1920x1080x32, linelength=7680
+[    1.057367] Console: switching to colour frame buffer device 240x67
+[    1.060716] simple-framebuffer 3e3cf000.framebuffer: fb0: simplefb registered!
+[    1.064724] iproc-rng200 fe104000.rng: hwrng registered
+[    1.064821] vc-mem: phys_addr:0x00000000 mem_base=0x3ec00000 mem_size:0x40000000(1024 MiB)
+[    1.069603] brd: module loaded
+[    1.072364] loop: module loaded
+[    1.072749] Loading iSCSI transport class v2.0-870.
+[    1.074785] bcmgenet fd580000.ethernet: GENET 5.0 EPHY: 0x0000
+[    1.280084] unimac-mdio unimac-mdio.-19: Broadcom UniMAC MDIO bus
+[    1.280652] usbcore: registered new interface driver lan78xx
+[    1.280676] usbcore: registered new interface driver smsc95xx
+[    1.281529] xhci_hcd 0000:01:00.0: enabling device (0000 -> 0002)
+[    1.281620] xhci_hcd 0000:01:00.0: xHCI Host Controller
+[    1.281634] xhci_hcd 0000:01:00.0: new USB bus registered, assigned bus number 1
+[    1.282750] xhci_hcd 0000:01:00.0: hcc params 0x002841eb hci version 0x100 quirks 0x0300240000000890
+[    1.283288] xhci_hcd 0000:01:00.0: xHCI Host Controller
+[    1.283297] xhci_hcd 0000:01:00.0: new USB bus registered, assigned bus number 2
+[    1.283306] xhci_hcd 0000:01:00.0: Host supports USB 3.0 SuperSpeed
+[    1.283434] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.12
+[    1.283442] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    1.283447] usb usb1: Product: xHCI Host Controller
+[    1.283451] usb usb1: Manufacturer: Linux 6.12.47+rpt-rpi-v8 xhci-hcd
+[    1.283455] usb usb1: SerialNumber: 0000:01:00.0
+[    1.283731] hub 1-0:1.0: USB hub found
+[    1.283780] hub 1-0:1.0: 1 port detected
+[    1.284128] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.12
+[    1.284136] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    1.284141] usb usb2: Product: xHCI Host Controller
+[    1.284144] usb usb2: Manufacturer: Linux 6.12.47+rpt-rpi-v8 xhci-hcd
+[    1.284148] usb usb2: SerialNumber: 0000:01:00.0
+[    1.284361] hub 2-0:1.0: USB hub found
+[    1.284412] hub 2-0:1.0: 4 ports detected
+[    1.284899] dwc_otg: version 3.00a 10-AUG-2012 (platform bus)
+[    1.284948] dwc_otg: FIQ enabled
+[    1.284952] dwc_otg: NAK holdoff enabled
+[    1.284954] dwc_otg: FIQ split-transaction FSM enabled
+[    1.284958] Module dwc_common_port init
+[    1.285513] usbcore: registered new interface driver uas
+[    1.285548] usbcore: registered new interface driver usb-storage
+[    1.285788] mousedev: PS/2 mouse device common for all mice
+[    1.287266] sdhci: Secure Digital Host Controller Interface driver
+[    1.287273] sdhci: Copyright(c) Pierre Ossman
+[    1.287372] sdhci-pltfm: SDHCI platform and OF driver helper
+[    1.287542] hid: raw HID events driver (C) Jiri Kosina
+[    1.287599] usbcore: registered new interface driver usbhid
+[    1.287603] usbhid: USB HID core driver
+[    1.291398] hw perfevents: enabled with armv8_cortex_a72 PMU driver, 7 (0,8000003f) counters available
+[    1.292028] NET: Registered PF_PACKET protocol family
+[    1.292106] Key type dns_resolver registered
+[    1.303216] registered taskstats version 1
+[    1.303367] Loading compiled-in X.509 certificates
+[    1.307501] Demotion targets for Node 0: null
+[    1.307515] Demotion targets for Node 1: null
+[    1.308020] Key type .fscrypt registered
+[    1.308025] Key type fscrypt-provisioning registered
+[    1.308112] AppArmor: AppArmor sha256 policy hashing enabled
+[    1.311728] uart-pl011 fe201000.serial: there is not valid maps for state default
+[    1.311981] uart-pl011 fe201000.serial: cts_event_workaround enabled
+[    1.312975] fe201000.serial: ttyAMA1 at MMIO 0xfe201000 (irq = 39, base_baud = 0) is a PL011 rev3
+[    1.313095] serial serial0: tty port ttyAMA1 registered
+[    1.314410] bcm2835-wdt bcm2835-wdt: Broadcom BCM2835 watchdog timer
+[    1.314773] bcm2835-power bcm2835-power: Broadcom BCM2835 power domains driver
+[    1.315185] mmc-bcm2835 fe300000.mmcnr: mmc_debug:0 mmc_debug2:0
+[    1.315193] mmc-bcm2835 fe300000.mmcnr: DMA channel allocated
+[    1.340632] of_cfs_init
+[    1.340714] of_cfs_init: OK
+[    1.340849] clk: Disabling unused clocks
+[    1.341060] PM: genpd: Disabling unused power domains
+[    1.378865] mmc0: SDHCI controller on fe340000.mmc [fe340000.mmc] using ADMA
+[    1.384587] Freeing unused kernel memory: 5440K
+[    1.384711] Run /init as init process
+[    1.384715]   with arguments:
+[    1.384717]     /init
+[    1.384720]     splash
+[    1.384722]   with environment:
+[    1.384724]     HOME=/
+[    1.384727]     TERM=linux
+[    1.425228] mmc1: new high speed SDIO card at address 0001
+[    1.495467] mmc0: new ultra high speed DDR50 SDXC card at address 5048
+[    1.500499] mmcblk0: mmc0:5048 SD64G 58.0 GiB
+[    1.506046]  mmcblk0: p1 p2
+[    1.506609] mmcblk0: mmc0:5048 SD64G 58.0 GiB (quirks 0x80000000)
+[    1.528114] usb 1-1: new high-speed USB device number 2 using xhci_hcd
+[    1.645056] brcmstb-i2c fef04500.i2c:  @97500hz registered in polling mode
+[    1.645293] brcmstb-i2c fef09500.i2c:  @97500hz registered in polling mode
+[    1.666779] usb 1-1: New USB device found, idVendor=2109, idProduct=3431, bcdDevice= 4.21
+[    1.666805] usb 1-1: New USB device strings: Mfr=0, Product=1, SerialNumber=0
+[    1.666810] usb 1-1: Product: USB2.0 Hub
+[    1.674357] hub 1-1:1.0: USB hub found
+[    1.674629] hub 1-1:1.0: 4 ports detected
+[    1.731635] v3d fec00000.v3d: [drm] Transparent Hugepage support is recommended for optimal performance on this platform!
+[    1.733157] [drm] Initialized v3d 1.0.0 for fec00000.v3d on minor 0
+[    1.738156] Console: switching to colour dummy device 80x25
+[    1.770541] vc4-drm gpu: bound fe400000.hvs (ops vc4_hvs_ops [vc4])
+[    1.771446] Registered IR keymap rc-cec
+[    1.771540] rc rc0: vc4-hdmi-0 as /devices/platform/soc/fef00700.hdmi/rc/rc0
+[    1.771631] input: vc4-hdmi-0 as /devices/platform/soc/fef00700.hdmi/rc/rc0/input0
+[    1.773394] input: vc4-hdmi-0 HDMI Jack as /devices/platform/soc/fef00700.hdmi/sound/card0/input1
+[    1.773690] vc4-drm gpu: bound fef00700.hdmi (ops vc4_hdmi_ops [vc4])
+[    1.775494] Registered IR keymap rc-cec
+[    1.775629] rc rc1: vc4-hdmi-1 as /devices/platform/soc/fef05700.hdmi/rc/rc1
+[    1.775756] input: vc4-hdmi-1 as /devices/platform/soc/fef05700.hdmi/rc/rc1/input2
+[    1.778349] input: vc4-hdmi-1 HDMI Jack as /devices/platform/soc/fef05700.hdmi/sound/card1/input3
+[    1.779575] vc4-drm gpu: bound fef05700.hdmi (ops vc4_hdmi_ops [vc4])
+[    1.780009] vc4-drm gpu: bound fe004000.txp (ops vc4_txp_ops [vc4])
+[    1.780556] vc4-drm gpu: bound fe206000.pixelvalve (ops vc4_crtc_ops [vc4])
+[    1.780780] vc4-drm gpu: bound fe207000.pixelvalve (ops vc4_crtc_ops [vc4])
+[    1.780914] vc4-drm gpu: bound fe20a000.pixelvalve (ops vc4_crtc_ops [vc4])
+[    1.781007] vc4-drm gpu: bound fe216000.pixelvalve (ops vc4_crtc_ops [vc4])
+[    1.781139] vc4-drm gpu: bound fec12000.pixelvalve (ops vc4_crtc_ops [vc4])
+[    1.783074] [drm] Initialized vc4 0.0.0 for gpu on minor 1
+[    1.783338] vc4-drm gpu: [drm] Cannot find any crtc or sizes
+[    1.786884] vc4-drm gpu: [drm] Cannot find any crtc or sizes
+[    1.787083] vc4-drm gpu: [drm] Cannot find any crtc or sizes
+[    1.960076] usb 1-1.2: new high-speed USB device number 3 using xhci_hcd
+[    2.091841] usb 1-1.2: New USB device found, idVendor=0c45, idProduct=6366, bcdDevice= 1.00
+[    2.091859] usb 1-1.2: New USB device strings: Mfr=2, Product=1, SerialNumber=3
+[    2.091864] usb 1-1.2: Product: Arducam_8mp
+[    2.091869] usb 1-1.2: Manufacturer: Arducam Technology Co., Ltd.
+[    2.091873] usb 1-1.2: SerialNumber: SN0001
+[    2.164078] usb 1-1.3: new high-speed USB device number 4 using xhci_hcd
+[    2.255346] usb 1-1.3: New USB device found, idVendor=2109, idProduct=2812, bcdDevice=90.80
+[    2.255364] usb 1-1.3: New USB device strings: Mfr=1, Product=2, SerialNumber=0
+[    2.255369] usb 1-1.3: Product: USB2.0 Hub             
+[    2.255374] usb 1-1.3: Manufacturer: VIA Labs, Inc.         
+[    2.256859] hub 1-1.3:1.0: USB hub found
+[    2.257116] hub 1-1.3:1.0: 4 ports detected
+[    2.557301] usb 1-1.3.3: new full-speed USB device number 5 using xhci_hcd
+[    2.663137] usb 1-1.3.3: New USB device found, idVendor=046d, idProduct=c07d, bcdDevice=88.02
+[    2.663155] usb 1-1.3.3: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+[    2.663161] usb 1-1.3.3: Product: Gaming Mouse G502
+[    2.663165] usb 1-1.3.3: Manufacturer: Logitech
+[    2.663169] usb 1-1.3.3: SerialNumber: 016233703038
+[    2.669541] input: Logitech Gaming Mouse G502 as /devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb1/1-1/1-1.3/1-1.3.3/1-1.3.3:1.0/0003:046D:C07D.0001/input/input4
+[    2.669776] hid-generic 0003:046D:C07D.0001: input,hidraw0: USB HID v1.11 Mouse [Logitech Gaming Mouse G502] on usb-0000:01:00.0-1.3.3/input0
+[    2.674611] input: Logitech Gaming Mouse G502 Keyboard as /devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb1/1-1/1-1.3/1-1.3.3/1-1.3.3:1.1/0003:046D:C07D.0002/input/input5
+[    2.728442] hid-generic 0003:046D:C07D.0002: input,hiddev96,hidraw1: USB HID v1.11 Keyboard [Logitech Gaming Mouse G502] on usb-0000:01:00.0-1.3.3/input1
+[    2.889327] EXT4-fs (mmcblk0p2): mounted filesystem ab889eff-78c7-476e-b200-c2f8aada8f9f ro with ordered data mode. Quota mode: none.
+[    3.378088] systemd[1]: System time before build time, advancing clock.
+[    3.485147] NET: Registered PF_INET6 protocol family
+[    3.485845] Segment Routing with IPv6
+[    3.485867] In-situ OAM (IOAM) with IPv6
+[    3.528455] systemd[1]: systemd 252.39-1~deb12u1 running in system mode (+PAM +AUDIT +SELINUX +APPARMOR +IMA +SMACK +SECCOMP +GCRYPT -GNUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 -IDN +IPTC +KMOD +LIBCRYPTSETUP +LIBFDISK +PCRE2 -PWQUALITY +P11KIT +QRENCODE +TPM2 +BZIP2 +LZ4 +XZ +ZLIB +ZSTD -BPF_FRAMEWORK -XKBCOMMON +UTMP +SYSVINIT default-hierarchy=unified)
+[    3.528498] systemd[1]: Detected architecture arm64.
+[    3.552081] systemd[1]: Hostname set to <MPCNC>.
+[    4.011278] systemd[1]: Configuration file /etc/systemd/system/stream_camera.service is marked executable. Please remove executable permission bits. Proceeding anyway.
+[    4.172547] systemd[1]: Queued start job for default target graphical.target.
+[    4.193426] systemd[1]: Created slice system-getty.slice - Slice /system/getty.
+[    4.194129] systemd[1]: Created slice system-modprobe.slice - Slice /system/modprobe.
+[    4.194641] systemd[1]: Created slice system-systemd\x2dfsck.slice - Slice /system/systemd-fsck.
+[    4.194966] systemd[1]: Created slice user.slice - User and Session Slice.
+[    4.195117] systemd[1]: Started systemd-ask-password-wall.path - Forward Password Requests to Wall Directory Watch.
+[    4.195505] systemd[1]: Set up automount proc-sys-fs-binfmt_misc.automount - Arbitrary Executable File Formats File System Automount Point.
+[    4.195568] systemd[1]: Expecting device dev-disk-by\x2dpartuuid-ae564808\x2d01.device - /dev/disk/by-partuuid/ae564808-01...
+[    4.195596] systemd[1]: Expecting device dev-dri-card0.device - /dev/dri/card0...
+[    4.195623] systemd[1]: Expecting device dev-dri-renderD128.device - /dev/dri/renderD128...
+[    4.195696] systemd[1]: Reached target integritysetup.target - Local Integrity Protected Volumes.
+[    4.195779] systemd[1]: Reached target nss-user-lookup.target - User and Group Name Lookups.
+[    4.195842] systemd[1]: Reached target slices.target - Slice Units.
+[    4.195897] systemd[1]: Reached target swap.target - Swaps.
+[    4.195954] systemd[1]: Reached target veritysetup.target - Local Verity Protected Volumes.
+[    4.196340] systemd[1]: Listening on systemd-fsckd.socket - fsck to fsckd communication Socket.
+[    4.196489] systemd[1]: Listening on systemd-initctl.socket - initctl Compatibility Named Pipe.
+[    4.197079] systemd[1]: Listening on systemd-journald-audit.socket - Journal Audit Socket.
+[    4.197354] systemd[1]: Listening on systemd-journald-dev-log.socket - Journal Socket (/dev/log).
+[    4.197640] systemd[1]: Listening on systemd-journald.socket - Journal Socket.
+[    4.198012] systemd[1]: Listening on systemd-udevd-control.socket - udev Control Socket.
+[    4.198221] systemd[1]: Listening on systemd-udevd-kernel.socket - udev Kernel Socket.
+[    4.198535] systemd[1]: dev-hugepages.mount - Huge Pages File System was skipped because of an unmet condition check (ConditionPathExists=/sys/kernel/mm/hugepages).
+[    4.200247] systemd[1]: Mounting dev-mqueue.mount - POSIX Message Queue File System...
+[    4.202318] systemd[1]: Mounting sys-kernel-debug.mount - Kernel Debug File System...
+[    4.204550] systemd[1]: Mounting sys-kernel-tracing.mount - Kernel Trace File System...
+[    4.204898] systemd[1]: auth-rpcgss-module.service - Kernel Module supporting RPCSEC_GSS was skipped because of an unmet condition check (ConditionPathExists=/etc/krb5.keytab).
+[    4.208649] systemd[1]: Starting fake-hwclock.service - Restore / save the current clock...
+[    4.211501] systemd[1]: Starting keyboard-setup.service - Set the console keyboard layout...
+[    4.214110] systemd[1]: Starting kmod-static-nodes.service - Create List of Static Device Nodes...
+[    4.216978] systemd[1]: Starting modprobe@configfs.service - Load Kernel Module configfs...
+[    4.220201] systemd[1]: Starting modprobe@dm_mod.service - Load Kernel Module dm_mod...
+[    4.223163] systemd[1]: Starting modprobe@drm.service - Load Kernel Module drm...
+[    4.226824] systemd[1]: Starting modprobe@efi_pstore.service - Load Kernel Module efi_pstore...
+[    4.231002] systemd[1]: Starting modprobe@fuse.service - Load Kernel Module fuse...
+[    4.236216] systemd[1]: Starting modprobe@loop.service - Load Kernel Module loop...
+[    4.236652] systemd[1]: systemd-fsck-root.service - File System Check on Root Device was skipped because of an unmet condition check (ConditionPathExists=!/run/initramfs/fsck-root).
+[    4.241795] systemd[1]: Starting systemd-journald.service - Journal Service...
+[    4.257225] device-mapper: ioctl: 4.48.0-ioctl (2023-03-01) initialised: dm-devel@lists.linux.dev
+[    4.260633] systemd[1]: Starting systemd-modules-load.service - Load Kernel Modules...
+[    4.263163] systemd[1]: Starting systemd-remount-fs.service - Remount Root and Kernel File Systems...
+[    4.265647] fuse: init (API version 7.41)
+[    4.269558] systemd[1]: Starting systemd-udev-trigger.service - Coldplug All udev Devices...
+[    4.274767] systemd[1]: Mounted dev-mqueue.mount - POSIX Message Queue File System.
+[    4.275510] systemd[1]: Mounted sys-kernel-debug.mount - Kernel Debug File System.
+[    4.276972] systemd[1]: Mounted sys-kernel-tracing.mount - Kernel Trace File System.
+[    4.280451] systemd[1]: Finished kmod-static-nodes.service - Create List of Static Device Nodes.
+[    4.282398] systemd[1]: modprobe@configfs.service: Deactivated successfully.
+[    4.283022] systemd[1]: Finished modprobe@configfs.service - Load Kernel Module configfs.
+[    4.283880] systemd[1]: modprobe@dm_mod.service: Deactivated successfully.
+[    4.285331] systemd[1]: Finished modprobe@dm_mod.service - Load Kernel Module dm_mod.
+[    4.286298] systemd[1]: modprobe@drm.service: Deactivated successfully.
+[    4.286693] systemd[1]: Finished modprobe@drm.service - Load Kernel Module drm.
+[    4.287593] systemd[1]: modprobe@efi_pstore.service: Deactivated successfully.
+[    4.288017] systemd[1]: Finished modprobe@efi_pstore.service - Load Kernel Module efi_pstore.
+[    4.289542] systemd[1]: modprobe@fuse.service: Deactivated successfully.
+[    4.290044] systemd[1]: Finished modprobe@fuse.service - Load Kernel Module fuse.
+[    4.291235] systemd[1]: modprobe@loop.service: Deactivated successfully.
+[    4.291626] systemd[1]: Finished modprobe@loop.service - Load Kernel Module loop.
+[    4.296494] systemd[1]: Mounting sys-fs-fuse-connections.mount - FUSE Control File System...
+[    4.300021] systemd[1]: Mounting sys-kernel-config.mount - Kernel Configuration File System...
+[    4.300379] systemd[1]: systemd-repart.service - Repartition Root Disk was skipped because no trigger condition checks were met.
+[    4.302909] systemd[1]: Finished fake-hwclock.service - Restore / save the current clock.
+[    4.309214] systemd[1]: Mounted sys-fs-fuse-connections.mount - FUSE Control File System.
+[    4.310296] systemd[1]: Mounted sys-kernel-config.mount - Kernel Configuration File System.
+[    4.313993] i2c_dev: i2c /dev entries driver
+[    4.316556] systemd[1]: Finished systemd-modules-load.service - Load Kernel Modules.
+[    4.319354] systemd[1]: Starting systemd-sysctl.service - Apply Kernel Variables...
+[    4.343496] EXT4-fs (mmcblk0p2): re-mounted ab889eff-78c7-476e-b200-c2f8aada8f9f r/w.
+[    4.350553] systemd[1]: Finished systemd-remount-fs.service - Remount Root and Kernel File Systems.
+[    4.351477] systemd[1]: systemd-firstboot.service - First Boot Wizard was skipped because of an unmet condition check (ConditionFirstBoot=yes).
+[    4.351744] systemd[1]: systemd-pstore.service - Platform Persistent Storage Archival was skipped because of an unmet condition check (ConditionDirectoryNotEmpty=/sys/fs/pstore).
+[    4.384602] systemd[1]: Starting systemd-random-seed.service - Load/Save Random Seed...
+[    4.389544] systemd[1]: Starting systemd-sysusers.service - Create System Users...
+[    4.390565] systemd[1]: Finished systemd-sysctl.service - Apply Kernel Variables.
+[    4.402127] systemd[1]: Started systemd-journald.service - Journal Service.
+[    4.437951] systemd-journald[286]: Received client request to flush runtime journal.
+[    4.479941] systemd-journald[286]: File /var/log/journal/0270f954fbcc413588108f46be029db4/system.journal corrupted or uncleanly shut down, renaming and replacing.
+[    5.325732] rpi-gpiomem fe200000.gpiomem: window base 0xfe200000 size 0x00001000
+[    5.328261] snd_bcm2835: module is from the staging directory, the quality is unknown, you have been warned.
+[    5.329852] rpi-gpiomem fe200000.gpiomem: initialised 1 regions as /dev/gpiomem
+[    5.340192] mc: Linux media interface: v0.10
+[    5.347782] bcm2835-audio bcm2835-audio: card created with 8 channels
+[    5.413751] videodev: Linux video capture interface: v2.00
+[    5.522554] vc_sm_cma: module is from the staging directory, the quality is unknown, you have been warned.
+[    5.523322] bcm2835_vc_sm_cma_probe: Videocore shared memory driver
+[    5.523338] [vc_sm_connected_init]: start
+[    5.526769] [vc_sm_connected_init]: installed successfully
+[    5.557215] usb 1-1.2: Found UVC 1.00 device Arducam_8mp (0c45:6366)
+[    5.557296] bcm2835_mmal_vchiq: module is from the staging directory, the quality is unknown, you have been warned.
+[    5.578673] bcm2835_isp: module is from the staging directory, the quality is unknown, you have been warned.
+[    5.587355] bcm2835_v4l2: module is from the staging directory, the quality is unknown, you have been warned.
+[    5.595225] bcm2835_codec: module is from the staging directory, the quality is unknown, you have been warned.
+[    5.598663] usbcore: registered new interface driver uvcvideo
+[    5.621161] rpi-hevc-dec feb00000.codec: Device registered as /dev/video19
+[    5.625731] bcm2835-isp bcm2835-isp: Device node output[0] registered as /dev/video13
+[    5.626817] bcm2835-isp bcm2835-isp: Device node capture[0] registered as /dev/video14
+[    5.627567] bcm2835-isp bcm2835-isp: Device node capture[1] registered as /dev/video15
+[    5.627846] bcm2835-isp bcm2835-isp: Device node stats[2] registered as /dev/video16
+[    5.627865] bcm2835-isp bcm2835-isp: Register output node 0 with media controller
+[    5.627878] bcm2835-isp bcm2835-isp: Register capture node 1 with media controller
+[    5.627883] bcm2835-isp bcm2835-isp: Register capture node 2 with media controller
+[    5.627888] bcm2835-isp bcm2835-isp: Register capture node 3 with media controller
+[    5.646367] bcm2835-isp bcm2835-isp: Device node output[0] registered as /dev/video20
+[    5.646522] bcm2835-codec bcm2835-codec: Device registered as /dev/video10
+[    5.646545] bcm2835-codec bcm2835-codec: Loaded V4L2 decode
+[    5.646793] bcm2835-isp bcm2835-isp: Device node capture[0] registered as /dev/video21
+[    5.648610] bcm2835-isp bcm2835-isp: Device node capture[1] registered as /dev/video22
+[    5.649317] bcm2835-isp bcm2835-isp: Device node stats[2] registered as /dev/video23
+[    5.649347] bcm2835-isp bcm2835-isp: Register output node 0 with media controller
+[    5.649360] bcm2835-isp bcm2835-isp: Register capture node 1 with media controller
+[    5.649366] bcm2835-isp bcm2835-isp: Register capture node 2 with media controller
+[    5.649371] bcm2835-isp bcm2835-isp: Register capture node 3 with media controller
+[    5.649478] bcm2835-isp bcm2835-isp: Loaded V4L2 bcm2835-isp
+[    5.656781] bcm2835-codec bcm2835-codec: Device registered as /dev/video11
+[    5.656814] bcm2835-codec bcm2835-codec: Loaded V4L2 encode
+[    5.671194] bcm2835-codec bcm2835-codec: Device registered as /dev/video12
+[    5.671244] bcm2835-codec bcm2835-codec: Loaded V4L2 isp
+[    5.682984] bcm2835-codec bcm2835-codec: Device registered as /dev/video18
+[    5.683047] bcm2835-codec bcm2835-codec: Loaded V4L2 image_fx
+[    5.690029] bcm2835-codec bcm2835-codec: Device registered as /dev/video31
+[    5.690060] bcm2835-codec bcm2835-codec: Loaded V4L2 encode_image
+[    5.692526] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    5.727571] usb 1-1.2: 3:1: cannot get freq at ep 0x84
+[    5.736637] Loaded X.509 cert 'benh@debian.org: 577e021cb980e0e820821ba7b54b4961b8b4fadf'
+[    5.737031] Loaded X.509 cert 'romain.perier@gmail.com: 3abbc6ec146e09d1b6016ab9d6cf71dd233f0328'
+[    5.737402] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[    5.737766] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[    5.746346] Bluetooth: Core ver 2.22
+[    5.746409] NET: Registered PF_BLUETOOTH protocol family
+[    5.746413] Bluetooth: HCI device and connection manager initialized
+[    5.746427] Bluetooth: HCI socket layer initialized
+[    5.746433] Bluetooth: L2CAP socket layer initialized
+[    5.746443] Bluetooth: SCO socket layer initialized
+[    5.779888] Bluetooth: HCI UART driver ver 2.3
+[    5.779907] Bluetooth: HCI UART protocol H4 registered
+[    5.779970] Bluetooth: HCI UART protocol Three-wire (H5) registered
+[    5.780273] Bluetooth: HCI UART protocol Broadcom registered
+[    5.781961] hci_uart_bcm serial0-0: supply vbat not found, using dummy regulator
+[    5.782092] hci_uart_bcm serial0-0: supply vddio not found, using dummy regulator
+[    5.838697] brcmfmac: F1 signature read @0x18000000=0x15264345
+[    5.851558] brcmfmac: brcmf_fw_alloc_request: using brcm/brcmfmac43455-sdio for chip BCM4345/6
+[    5.852541] usbcore: registered new interface driver brcmfmac
+[    5.895329] usbcore: registered new interface driver snd-usb-audio
+[    6.136620] Bluetooth: hci0: BCM: chip id 107
+[    6.137252] Bluetooth: hci0: BCM: features 0x2f
+[    6.138470] Bluetooth: hci0: BCM4345C0
+[    6.138483] Bluetooth: hci0: BCM4345C0 (003.001.025) build 0000
+[    6.145011] brcmfmac: brcmf_c_process_txcap_blob: no txcap_blob available (err=-2)
+[    6.145414] brcmfmac: brcmf_c_preinit_dcmds: Firmware: BCM4345/6 wl0: Aug 29 2023 01:47:08 version 7.45.265 (28bca26 CY) FWID 01-b677b91b
+[    6.191864] Bluetooth: hci0: BCM4345C0 'brcm/BCM4345C0.raspberrypi,4-model-b.hcd' Patch
+[    6.323300] audit: type=1400 audit(1772493423.019:2): apparmor="STATUS" operation="profile_load" profile="unconfined" name="lsb_release" pid=551 comm="apparmor_parser"
+[    6.325230] audit: type=1400 audit(1772493423.023:3): apparmor="STATUS" operation="profile_load" profile="unconfined" name="nvidia_modprobe" pid=552 comm="apparmor_parser"
+[    6.325260] audit: type=1400 audit(1772493423.023:4): apparmor="STATUS" operation="profile_load" profile="unconfined" name="nvidia_modprobe//kmod" pid=552 comm="apparmor_parser"
+[    6.337874] audit: type=1400 audit(1772493423.035:5): apparmor="STATUS" operation="profile_load" profile="unconfined" name="/usr/lib/NetworkManager/nm-dhcp-client.action" pid=553 comm="apparmor_parser"
+[    6.337922] audit: type=1400 audit(1772493423.035:6): apparmor="STATUS" operation="profile_load" profile="unconfined" name="/usr/lib/NetworkManager/nm-dhcp-helper" pid=553 comm="apparmor_parser"
+[    6.337943] audit: type=1400 audit(1772493423.035:7): apparmor="STATUS" operation="profile_load" profile="unconfined" name="/usr/lib/connman/scripts/dhclient-script" pid=553 comm="apparmor_parser"
+[    6.337965] audit: type=1400 audit(1772493423.035:8): apparmor="STATUS" operation="profile_load" profile="unconfined" name="/{,usr/}sbin/dhclient" pid=553 comm="apparmor_parser"
+[    6.339799] audit: type=1400 audit(1772493423.035:9): apparmor="STATUS" operation="profile_load" profile="unconfined" name="/usr/bin/man" pid=556 comm="apparmor_parser"
+[    6.339828] audit: type=1400 audit(1772493423.035:10): apparmor="STATUS" operation="profile_load" profile="unconfined" name="man_filter" pid=556 comm="apparmor_parser"
+[    6.339835] audit: type=1400 audit(1772493423.035:11): apparmor="STATUS" operation="profile_load" profile="unconfined" name="man_groff" pid=556 comm="apparmor_parser"
+[    6.929841] Bluetooth: hci0: BCM: features 0x2f
+[    6.931163] Bluetooth: hci0: BCM43455 37.4MHz Raspberry Pi 3+-0190
+[    6.931183] Bluetooth: hci0: BCM4345C0 (003.001.025) build 0382
+[    7.102659] Adding 204796k swap on /var/swap.  Priority:-2 extents:8 across:16531452k SS
+[    7.441138] Bluetooth: BNEP (Ethernet Emulation) ver 1.3
+[    7.441156] Bluetooth: BNEP filters: protocol multicast
+[    7.441169] Bluetooth: BNEP socket layer initialized
+[    7.447787] Bluetooth: MGMT ver 1.23
+[    7.502952] NET: Registered PF_ALG protocol family
+[    9.030630] bcmgenet fd580000.ethernet: configuring instance for external RGMII (RX delay)
+[    9.032492] bcmgenet fd580000.ethernet eth0: Link is Down
+[    9.076314] brcmfmac: brcmf_cfg80211_set_power_mgmt: power save enabled
+[   20.499427] usb 1-1.2: 3:1: cannot get freq at ep 0x84
+[   20.688656] usb 1-1.2: 3:1: cannot get freq at ep 0x84
+[   22.376503] Bluetooth: RFCOMM TTY layer initialized
+[   22.376535] Bluetooth: RFCOMM socket layer initialized
+[   22.376553] Bluetooth: RFCOMM ver 1.11
+[   25.604295] hwmon hwmon1: Undervoltage detected!
+[   27.924702] Console: switching to colour frame buffer device 240x67
+[   27.924772] vc4-drm gpu: [drm] fb0: vc4drmfb frame buffer device
+[   33.668215] hwmon hwmon1: Voltage normalised
+[   37.700257] hwmon hwmon1: Undervoltage detected!
+[   51.812246] hwmon hwmon1: Voltage normalised
+[   69.956345] hwmon hwmon1: Undervoltage detected!
+[   73.988695] hwmon hwmon1: Voltage normalised
+[  140.521732] hwmon hwmon1: Undervoltage detected!
+[  144.548685] hwmon hwmon1: Voltage normalised
+[  152.467802] usb 1-1.3.2: new low-speed USB device number 6 using xhci_hcd
+[  152.597673] usb 1-1.3.2: New USB device found, idVendor=045e, idProduct=00db, bcdDevice= 1.73
+[  152.597693] usb 1-1.3.2: New USB device strings: Mfr=1, Product=2, SerialNumber=0
+[  152.597699] usb 1-1.3.2: Product: Natural® Ergonomic Keyboard 4000
+[  152.597703] usb 1-1.3.2: Manufacturer: Microsoft
+[  152.667231] input: Microsoft Natural® Ergonomic Keyboard 4000 as /devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb1/1-1/1-1.3/1-1.3.2/1-1.3.2:1.0/0003:045E:00DB.0003/input/input8
+[  152.804291] microsoft 0003:045E:00DB.0003: input,hidraw2: USB HID v1.11 Keyboard [Microsoft Natural® Ergonomic Keyboard 4000] on usb-0000:01:00.0-1.3.2/input0
+[  152.805612] input: Microsoft Natural® Ergonomic Keyboard 4000 as /devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb1/1-1/1-1.3/1-1.3.2/1-1.3.2:1.1/0003:045E:00DB.0004/input/input9
+[  152.864459] microsoft 0003:045E:00DB.0004: input,hidraw3: USB HID v1.11 Device [Microsoft Natural® Ergonomic Keyboard 4000] on usb-0000:01:00.0-1.3.2/input1
+[  177.091865] usb 1-1.3.3: USB disconnect, device number 5
+[  183.492742] usb 1-1.3.2: USB disconnect, device number 6
+[  187.997609] usb 1-1.3.2: new full-speed USB device number 7 using xhci_hcd
+[  188.112858] usb 1-1.3.2: New USB device found, idVendor=046d, idProduct=c07d, bcdDevice=88.02
+[  188.112895] usb 1-1.3.2: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+[  188.112901] usb 1-1.3.2: Product: Gaming Mouse G502
+[  188.112907] usb 1-1.3.2: Manufacturer: Logitech
+[  188.112912] usb 1-1.3.2: SerialNumber: 016233703038
+[  188.127509] input: Logitech Gaming Mouse G502 as /devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb1/1-1/1-1.3/1-1.3.2/1-1.3.2:1.0/0003:046D:C07D.0005/input/input10
+[  188.127865] hid-generic 0003:046D:C07D.0005: input,hidraw0: USB HID v1.11 Mouse [Logitech Gaming Mouse G502] on usb-0000:01:00.0-1.3.2/input0
+[  188.133310] input: Logitech Gaming Mouse G502 Keyboard as /devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb1/1-1/1-1.3/1-1.3.2/1-1.3.2:1.1/0003:046D:C07D.0006/input/input11
+[  188.189999] hid-generic 0003:046D:C07D.0006: input,hiddev96,hidraw1: USB HID v1.11 Keyboard [Logitech Gaming Mouse G502] on usb-0000:01:00.0-1.3.2/input1
+[  188.897653] hwmon hwmon1: Undervoltage detected!
+[  192.933419] hwmon hwmon1: Voltage normalised
+[  203.013181] hwmon hwmon1: Undervoltage detected!
+[  207.040977] hwmon hwmon1: Voltage normalised
+[  273.567455] hwmon hwmon1: Undervoltage detected!
+[  277.599373] hwmon hwmon1: Voltage normalised
+[  279.615280] hwmon hwmon1: Undervoltage detected!
+[  283.647099] hwmon hwmon1: Voltage normalised
+[  370.337038] hwmon hwmon1: Undervoltage detected!
+[  374.364937] hwmon hwmon1: Voltage normalised
+[  378.396942] hwmon hwmon1: Undervoltage detected!
+[  382.428716] hwmon hwmon1: Voltage normalised
+[  396.544633] hwmon hwmon1: Undervoltage detected!
+[  404.604431] hwmon hwmon1: Voltage normalised
+[  418.718827] hwmon hwmon1: Undervoltage detected!
+[  422.749024] hwmon hwmon1: Voltage normalised
+[  426.784269] hwmon hwmon1: Undervoltage detected!
+[  430.815788] hwmon hwmon1: Voltage normalised
+[  517.498261] hwmon hwmon1: Undervoltage detected!
+[  525.562650] hwmon hwmon1: Voltage normalised
+[  630.396525] hwmon hwmon1: Undervoltage detected!
+[  634.428430] hwmon hwmon1: Voltage normalised
+[  636.448525] hwmon hwmon1: Undervoltage detected!
+[  639.754998] OF: overlay: WARNING: memory leak will occur if overlay removed, property: /soc/spi@7e204000/status
+[  640.476509] hwmon hwmon1: Voltage normalised
+[  644.512602] hwmon hwmon1: Undervoltage detected!
+[  647.065325] OF: overlay: WARNING: memory leak will occur if overlay removed, property: /soc/i2c@7e804000/status
+[  648.540564] hwmon hwmon1: Voltage normalised
+[  656.608669] hwmon hwmon1: Undervoltage detected!
+[  660.636690] hwmon hwmon1: Voltage normalised
+[  662.653139] hwmon hwmon1: Undervoltage detected!
+
+EEPROM
+------
+
+*** UPDATE AVAILABLE ***
+
+Run "sudo rpi-eeprom-update -a" to install this update now.
+
+To configure the bootloader update policy run "sudo raspi-config"
+
+BOOTLOADER: update available
+   CURRENT: Thu  8 May 15:21:35 UTC 2025 (1746717695)
+    LATEST: Mon  8 Dec 19:23:42 UTC 2025 (1765221822)
+   RELEASE: default (/usr/lib/firmware/raspberrypi/bootloader-2711/default)
+            Use raspi-config to change the release.
+
+  VL805_FW: Dedicated VL805 EEPROM
+     VL805: up to date
+   CURRENT: 000138c0
+    LATEST: 000138c0
