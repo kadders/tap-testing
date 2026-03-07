@@ -292,6 +292,7 @@ def run_cycle_gui(
     root.title("Tap Test Cycle — Milo")
     root.minsize(500, 400)
     root.geometry("800x500")
+    root.resizable(True, True)
 
     # Status area
     status_var = tk.StringVar(value="Initializing...")

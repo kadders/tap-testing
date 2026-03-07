@@ -48,8 +48,10 @@ from .record_tap import record_stream
 # CSV columns: driver returns m/s²; 1 g = 9.80665 m/s²
 _MPS2_TO_G = 1.0 / 9.80665
 
-# Max points to show in the X/Y trail
-_PLOT_TRAIL_LEN = 800
+# Max points to show in the X/Y trail (longer trail = better motion visual)
+_PLOT_TRAIL_LEN = 8000
+# Axis range for live plot (g); homing motion typically well under ±2.5 g
+_PLOT_RANGE_G = 2.5
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +111,12 @@ def _run_recording_worker(
             root.after(0, on_done)
 
     def sample_callback(t: float, x_g: float, y_g: float, z_g: float) -> None:
+        # x_g, y_g, z_g are sensor X,Y,Z in g (same order as accelerometer.acceleration → CSV ax_g, ay_g, az_g)
         mag = (x_g * x_g + y_g * y_g + z_g * z_g) ** 0.5
         s = f"t={t:.2f}s  x={x_g:+.3f}  y={y_g:+.3f}  z={z_g:+.3f}  |a|={mag:.3f} g"
         root.after(0, lambda: live_var.set(s))
         if on_plot_point is not None:
+            # Plot horizontal plane: ax = sensor X (g), ay = sensor Y (g)
             root.after(0, lambda ax=x_g, ay=y_g: on_plot_point(ax, ay))
 
     try:
@@ -158,6 +162,7 @@ def run_homing_calibration_gui(
     root.title("Homing calibration — live spindle recording")
     root.minsize(520, 520)
     root.geometry("720x620")
+    root.resizable(True, True)
 
     # Shared accelerometer (opened once; used for live plot and recording)
     shared_accel: object | None = None
@@ -166,6 +171,8 @@ def run_homing_calibration_gui(
     plot_trail_y: deque = deque(maxlen=_PLOT_TRAIL_LEN)
     # Timer id for live plot updates when not recording
     live_plot_timer_id: str | None = None
+    # Timer id for "clear plot every 5 s" option
+    clear_plot_timer_id: str | None = None
     recording_active = False
 
     # --- Design parameters frame ---
@@ -184,6 +191,15 @@ def run_homing_calibration_gui(
     tk.Spinbox(params_frame, from_=100, to=3200, increment=100, textvariable=rate_var, width=8).grid(
         row=row, column=1, sticky=tk.W, padx=5, pady=2
     )
+    row += 1
+
+    clear_every_5s_var = tk.BooleanVar(value=False)
+    clear_5s_cb = tk.Checkbutton(
+        params_frame,
+        text="Clear plot every 5 s",
+        variable=clear_every_5s_var,
+    )
+    clear_5s_cb.grid(row=row, column=0, columnspan=2, sticky=tk.W, pady=2)
     row += 1
 
     params_frame.columnconfigure(1, weight=1)
@@ -215,72 +231,14 @@ def run_homing_calibration_gui(
     live_label = tk.Label(live_frame, textvariable=live_var, font=("TkFixedFont", 10), fg="darkgreen")
     live_label.pack(side=tk.LEFT)
 
-    # --- Live X/Y plot (ax vs ay in g) ---
-    plot_frame = tk.LabelFrame(root, text="Live X/Y (ax vs ay, g) — from accelerometer", padx=4, pady=4)
-    plot_frame.pack(pady=6, padx=10, fill=tk.BOTH, expand=True)
-
-    fig = None
-    line_xy = None
-    canvas = None
-
-    def _init_plot() -> None:
-        nonlocal fig, line_xy, canvas
-        import matplotlib.pyplot as plt
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-        fig, ax = plt.subplots(figsize=(5, 4))
-        ax.set_xlabel("ax (g)")
-        ax.set_ylabel("ay (g)")
-        ax.set_title("Horizontal plane acceleration")
-        ax.grid(True, alpha=0.3)
-        ax.axhline(0, color="gray", linewidth=0.5)
-        ax.axvline(0, color="gray", linewidth=0.5)
-        line_xy, = ax.plot([], [], "b-", linewidth=0.8, alpha=0.8)
-        ax.set_xlim(-cfg.range_g, cfg.range_g)
-        ax.set_ylim(-cfg.range_g, cfg.range_g)
-        fig.tight_layout()
-        canvas = FigureCanvasTkAgg(fig, master=plot_frame)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-
-    def append_plot_point(ax_g: float, ay_g: float) -> None:
-        plot_trail_x.append(ax_g)
-        plot_trail_y.append(ay_g)
-
-    def redraw_plot() -> None:
-        if line_xy is None or canvas is None:
-            return
-        if not plot_trail_x:
-            return
-        line_xy.set_data(list(plot_trail_x), list(plot_trail_y))
-        canvas.draw_idle()
-
-    def live_update_plot() -> None:
-        """Read accelerometer and update X/Y plot; reschedule when not recording."""
-        nonlocal live_plot_timer_id
-        if recording_active or shared_accel is None:
-            if not recording_active and shared_accel is not None:
-                live_plot_timer_id = root.after(50, live_update_plot)
-            return
-        try:
-            x, y, _ = shared_accel.acceleration
-            ax_g = x * _MPS2_TO_G
-            ay_g = y * _MPS2_TO_G
-            append_plot_point(ax_g, ay_g)
-            redraw_plot()
-        except Exception:
-            pass
-        live_plot_timer_id = root.after(50, live_update_plot)
-
-    _init_plot()
-
-    # --- Start / Stop recording ---
+    # --- Start / Stop recording (packed before plot so buttons stay visible) ---
     button_frame = tk.Frame(root)
     button_frame.pack(pady=10, padx=10, fill=tk.X)
 
     stop_event: threading.Event | None = None
 
     def start_recording() -> None:
-        nonlocal stop_event, recording_active, live_plot_timer_id
+        nonlocal stop_event, recording_active, live_plot_timer_id, clear_plot_timer_id
         if shared_accel is None:
             status_var.set("Accelerometer not available. Check connection and retry.")
             return
@@ -297,6 +255,9 @@ def run_homing_calibration_gui(
         if live_plot_timer_id is not None:
             root.after_cancel(live_plot_timer_id)
             live_plot_timer_id = None
+        if clear_plot_timer_id is not None:
+            root.after_cancel(clear_plot_timer_id)
+            clear_plot_timer_id = None
 
         status_var.set("Recording… Run homing on the machine (Z up, then X Y home). Click Stop when done.")
         start_btn.config(state=tk.DISABLED, text="Recording…")
@@ -306,12 +267,14 @@ def run_homing_calibration_gui(
         stop_event = threading.Event()
 
         def on_done() -> None:
-            nonlocal recording_active, live_plot_timer_id
+            nonlocal recording_active, live_plot_timer_id, clear_plot_timer_id
             recording_active = False
             start_btn.config(state=tk.NORMAL, text="Start recording")
             stop_btn.config(state=tk.DISABLED)
             if shared_accel is not None:
                 live_plot_timer_id = root.after(50, live_update_plot)
+            if clear_every_5s_var.get():
+                clear_plot_timer_id = root.after(5000, _clear_plot_every_5s)
 
         def on_plot_point(ax_g: float, ay_g: float) -> None:
             append_plot_point(ax_g, ay_g)
@@ -354,6 +317,88 @@ def run_homing_calibration_gui(
         command=stop_recording,
     )
     stop_btn.pack(side=tk.LEFT, padx=5)
+
+    # --- Live X/Y plot (ax vs ay in g); ax = sensor X, ay = sensor Y (ADXL345 DATAX/DATAY) ---
+    plot_frame = tk.LabelFrame(root, text="Live X/Y (ax vs ay, g) — from accelerometer", padx=4, pady=4)
+    plot_frame.pack(pady=6, padx=10, fill=tk.BOTH, expand=True)
+
+    fig = None
+    line_xy = None
+    canvas = None
+
+    def _init_plot() -> None:
+        nonlocal fig, line_xy, canvas
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        fig, ax = plt.subplots(figsize=(5, 4))
+        ax.set_xlabel("ax (g)")
+        ax.set_ylabel("ay (g)")
+        ax.set_title("Horizontal plane acceleration")
+        ax.grid(True, alpha=0.3)
+        ax.axhline(0, color="gray", linewidth=0.5)
+        ax.axvline(0, color="gray", linewidth=0.5)
+        line_xy, = ax.plot([], [], "b-", linewidth=0.8, alpha=0.8)
+        ax.set_xlim(-_PLOT_RANGE_G, _PLOT_RANGE_G)
+        ax.set_ylim(-_PLOT_RANGE_G, _PLOT_RANGE_G)
+        fig.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=plot_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def append_plot_point(ax_g: float, ay_g: float) -> None:
+        plot_trail_x.append(ax_g)
+        plot_trail_y.append(ay_g)
+
+    def redraw_plot() -> None:
+        if line_xy is None or canvas is None:
+            return
+        if not plot_trail_x:
+            return
+        line_xy.set_data(list(plot_trail_x), list(plot_trail_y))
+        canvas.draw_idle()
+
+    def live_update_plot() -> None:
+        """Read accelerometer and update X/Y plot; reschedule when not recording."""
+        nonlocal live_plot_timer_id
+        if recording_active or shared_accel is None:
+            if not recording_active and shared_accel is not None:
+                live_plot_timer_id = root.after(50, live_update_plot)
+            return
+        try:
+            # acceleration is (X, Y, Z) in m/s²; convert to g for plot (same mapping as recording CSV)
+            x, y, _ = shared_accel.acceleration
+            ax_g = x * _MPS2_TO_G
+            ay_g = y * _MPS2_TO_G
+            append_plot_point(ax_g, ay_g)
+            redraw_plot()
+        except Exception:
+            pass
+        live_plot_timer_id = root.after(50, live_update_plot)
+
+    _init_plot()
+
+    def _clear_plot_every_5s() -> None:
+        nonlocal clear_plot_timer_id
+        plot_trail_x.clear()
+        plot_trail_y.clear()
+        if line_xy is not None and canvas is not None:
+            line_xy.set_data([], [])
+            canvas.draw_idle()
+        if clear_every_5s_var.get():
+            clear_plot_timer_id = root.after(5000, _clear_plot_every_5s)
+
+    def _on_clear_5s_toggled() -> None:
+        nonlocal clear_plot_timer_id
+        if clear_every_5s_var.get():
+            if clear_plot_timer_id is not None:
+                root.after_cancel(clear_plot_timer_id)
+            clear_plot_timer_id = root.after(5000, _clear_plot_every_5s)
+        else:
+            if clear_plot_timer_id is not None:
+                root.after_cancel(clear_plot_timer_id)
+                clear_plot_timer_id = None
+
+    clear_5s_cb.config(command=_on_clear_5s_toggled)
 
     # Pre-flight: open accelerometer once for live plot and recording
     def check_accel() -> None:

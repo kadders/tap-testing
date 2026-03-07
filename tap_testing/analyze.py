@@ -405,6 +405,197 @@ def fft_magnitude_spectrum(
     return freqs, magnitude
 
 
+# ----- Chatter identification (cutting recording) -----
+
+def _spectrum_peaks(
+    freqs: np.ndarray,
+    magnitude: np.ndarray,
+    n_peaks: int = 10,
+    min_separation_hz: float = 3.0,
+) -> list[tuple[float, float]]:
+    """
+    Find top frequency peaks (local maxima) with minimum separation.
+
+    Returns list of (freq_hz, magnitude) sorted by magnitude descending.
+    """
+    if len(freqs) < 3 or n_peaks <= 0:
+        return []
+    # Local maxima: greater than both neighbors
+    peak_idx: list[int] = []
+    for i in range(1, len(freqs) - 1):
+        if magnitude[i] >= magnitude[i - 1] and magnitude[i] >= magnitude[i + 1]:
+            peak_idx.append(i)
+    if not peak_idx:
+        return []
+    # Sort by magnitude descending, then enforce min separation (keep higher magnitude)
+    by_mag = sorted(peak_idx, key=lambda j: magnitude[j], reverse=True)
+    kept: list[int] = []
+    for j in by_mag:
+        f_j = float(freqs[j])
+        if any(abs(f_j - float(freqs[k])) < min_separation_hz for k in kept):
+            continue
+        kept.append(j)
+        if len(kept) >= n_peaks:
+            break
+    return [(float(freqs[k]), float(magnitude[k])) for k in kept]
+
+
+@dataclass
+class ChatterAssessmentResult:
+    """Result of chatter assessment on a cutting recording."""
+
+    is_chatter_likely: bool
+    dominant_freq_hz: float
+    peak_near_natural_hz: float | None  # strongest peak within fn band, or None
+    natural_freq_hz: float
+    natural_freq_band_hz: tuple[float, float]
+    peaks: list[tuple[float, float]]  # (freq, magnitude) top peaks
+    suggested_rpm: list[float]  # stability lobe speeds using detected or fn (if n_teeth set)
+
+
+def assess_chatter(
+    signal: np.ndarray,
+    sample_rate_hz: float,
+    natural_freq_hz: float,
+    natural_freq_uncertainty_hz: float | None = None,
+    n_teeth: int | None = None,
+    rpm: float | None = None,
+    band_fraction: float = 0.03,
+) -> ChatterAssessmentResult:
+    """
+    Assess whether a cutting recording shows likely chatter (peak near natural frequency).
+
+    Chatter is self-excited vibration at or near a structural natural frequency. If the
+    spectrum of the cutting signal has a significant peak within the natural-frequency
+    band (fn ± uncertainty or ± band_fraction×fn), chatter is likely. Tooth-passing
+    content is not treated as chatter; use n_teeth and rpm to interpret peaks.
+
+    Args:
+        signal: Vibration signal (e.g. magnitude sqrt(ax²+ay²+az²)) from cutting.
+        sample_rate_hz: Sample rate in Hz.
+        natural_freq_hz: Natural frequency from tap test (Hz).
+        natural_freq_uncertainty_hz: Optional ± band around fn (Hz). If None, use band_fraction×fn.
+        n_teeth: Optional flute count for suggested stable RPM.
+        rpm: Optional current spindle RPM (for context / tooth-passing check).
+        band_fraction: Fraction of fn for band if natural_freq_uncertainty_hz not set (default 0.03).
+
+    Returns:
+        ChatterAssessmentResult with is_chatter_likely, dominant_freq_hz, peak_near_natural_hz, etc.
+    """
+    if natural_freq_hz <= 0 or sample_rate_hz <= 0 or len(signal) < 4:
+        return ChatterAssessmentResult(
+            is_chatter_likely=False,
+            dominant_freq_hz=0.0,
+            peak_near_natural_hz=None,
+            natural_freq_hz=natural_freq_hz,
+            natural_freq_band_hz=(natural_freq_hz, natural_freq_hz),
+            peaks=[],
+            suggested_rpm=[],
+        )
+    u_hz = natural_freq_uncertainty_hz
+    if u_hz is None or u_hz <= 0:
+        u_hz = natural_freq_hz * band_fraction
+    fn_lo = natural_freq_hz - u_hz
+    fn_hi = natural_freq_hz + u_hz
+
+    freqs, magnitude = fft_magnitude_spectrum(signal, sample_rate_hz)
+    if len(freqs) == 0:
+        return ChatterAssessmentResult(
+            is_chatter_likely=False,
+            dominant_freq_hz=0.0,
+            peak_near_natural_hz=None,
+            natural_freq_hz=natural_freq_hz,
+            natural_freq_band_hz=(fn_lo, fn_hi),
+            peaks=[],
+            suggested_rpm=[],
+        )
+
+    peaks = _spectrum_peaks(freqs, magnitude, n_peaks=10, min_separation_hz=min(3.0, sample_rate_hz / len(signal) * 2))
+    dominant_freq_hz = float(freqs[np.argmax(magnitude[1:]) + 1]) if len(freqs) > 1 else 0.0
+
+    # Strongest peak within fn band
+    peak_near_natural_hz = None
+    peak_near_mag = 0.0
+    for f, mag in peaks:
+        if fn_lo <= f <= fn_hi and mag > peak_near_mag:
+            peak_near_natural_hz = f
+            peak_near_mag = mag
+
+    # Chatter likely if there is a substantial peak in the fn band (and optionally
+    # it's not obviously tooth-passing when rpm/n_teeth given)
+    f_tooth_hz = None
+    if n_teeth is not None and rpm is not None and rpm > 0 and n_teeth > 0:
+        f_tooth_hz = rpm * n_teeth / 60.0
+    is_chatter = peak_near_natural_hz is not None
+    if is_chatter and f_tooth_hz is not None and peak_near_natural_hz is not None:
+        # If the peak is very close to tooth-passing or a harmonic, could be forced resonance
+        for k in range(1, 6):
+            if abs(peak_near_natural_hz - k * f_tooth_hz) < u_hz:
+                # Peak coincides with tooth-pass harmonic; still treat as bad (resonance/chatter)
+                break
+        else:
+            pass  # peak not at tooth-pass → clearer chatter
+
+    # Suggested RPM: use detected chatter frequency (or fn) and stability lobe formula
+    suggested_rpm = []
+    if n_teeth is not None and n_teeth > 0:
+        from tap_testing.milling_dynamics import stability_lobe_best_spindle_speed_rpm
+        fc = peak_near_natural_hz if peak_near_natural_hz is not None else natural_freq_hz
+        for n in range(4):
+            rpm_n = stability_lobe_best_spindle_speed_rpm(fc, n_teeth, lobe_index_n=n)
+            if rpm_n > 0:
+                suggested_rpm.append(rpm_n)
+
+    return ChatterAssessmentResult(
+        is_chatter_likely=is_chatter,
+        dominant_freq_hz=dominant_freq_hz,
+        peak_near_natural_hz=peak_near_natural_hz,
+        natural_freq_hz=natural_freq_hz,
+        natural_freq_band_hz=(fn_lo, fn_hi),
+        peaks=peaks,
+        suggested_rpm=suggested_rpm,
+    )
+
+
+def plot_chatter_spectrum_figure(
+    freqs: np.ndarray,
+    magnitude: np.ndarray,
+    result: ChatterAssessmentResult,
+    output_path: str | Path | None = None,
+    figsize: tuple[float, float] = (8, 3),
+    freq_max_hz: float | None = None,
+) -> "matplotlib.figure.Figure":
+    """Plot cutting spectrum with natural-frequency band and peaks marked (for chatter analysis)."""
+    import matplotlib.pyplot as plt
+
+    if len(freqs) == 0:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.text(0.5, 0.5, "No spectrum data", ha="center", va="center", transform=ax.transAxes)
+        return fig
+    fn_lo, fn_hi = result.natural_freq_band_hz
+    if freq_max_hz is None:
+        freq_max_hz = max(float(freqs[-1]), 2.0 * result.natural_freq_hz)
+    fig, ax = plt.subplots(figsize=figsize)
+    mask = freqs <= freq_max_hz
+    ax.plot(freqs[mask], magnitude[mask], color="#2980b9", linewidth=1.0, label="FFT magnitude")
+    ax.axvspan(fn_lo, fn_hi, color="#c0392b", alpha=0.2, label=f"Natural freq. {result.natural_freq_hz:.1f} Hz ± band")
+    ax.axvline(result.natural_freq_hz, color="#c0392b", linestyle="--", linewidth=1.0)
+    for f, mag in result.peaks[:5]:
+        if f <= freq_max_hz:
+            ax.scatter([f], [mag], color="#e74c3c", s=40, zorder=5)
+            ax.annotate(f"{f:.0f}", (f, mag), xytext=(0, 6), textcoords="offset points", fontsize=8, ha="center")
+    ax.set_xlim(0, freq_max_hz)
+    ax.set_xlabel("Frequency (Hz)")
+    ax.set_ylabel("Magnitude")
+    ax.set_title("Cutting recording — chatter assessment (peaks in red; band = natural freq.)")
+    ax.legend(loc="upper right", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    if output_path:
+        fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    return fig
+
+
 def decay_envelope_and_damping(
     t: np.ndarray,
     mag: np.ndarray,
@@ -2508,6 +2699,42 @@ def main() -> None:
         help="Flute (tooth) count (default 4)",
     )
     parser.add_argument(
+        "--chatter",
+        action="store_true",
+        help="Run chatter identification on CSV (cutting recording). Requires --natural-freq from tap test.",
+    )
+    parser.add_argument(
+        "--natural-freq",
+        type=float,
+        default=None,
+        metavar="HZ",
+        dest="natural_freq_hz_chatter",
+        help="Natural frequency in Hz (from tap test); required for --chatter. Used as reference band for chatter detection.",
+    )
+    parser.add_argument(
+        "--natural-freq-uncertainty",
+        type=float,
+        default=None,
+        metavar="HZ",
+        dest="natural_freq_uncertainty_hz_chatter",
+        help="± band around natural freq. for chatter (Hz). Default 3%% of fn.",
+    )
+    parser.add_argument(
+        "--chatter-plot-out",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="Save chatter spectrum figure (cutting FFT + fn band + peaks) to file",
+    )
+    parser.add_argument(
+        "--rpm",
+        type=float,
+        default=None,
+        metavar="RPM",
+        dest="rpm_chatter",
+        help="Current spindle RPM during cut (optional; used with --chatter for tooth-passing context)",
+    )
+    parser.add_argument(
         "--calc-rpm",
         type=float,
         default=None,
@@ -2825,6 +3052,46 @@ def main() -> None:
         help="Minimum chipload (mm/tooth) for chip evacuation zone; below = Low fz (default 0.025).",
     )
     args = parser.parse_args()
+
+    # Chatter identification: analyze cutting recording against tap-test natural frequency.
+    if getattr(args, "chatter", False):
+        fn = getattr(args, "natural_freq_hz_chatter", None)
+        if fn is None or fn <= 0:
+            parser.error("--chatter requires --natural-freq HZ (from tap test)")
+        csv_path = Path(args.csv_file)
+        if not csv_path.exists():
+            parser.error(f"CSV not found: {csv_path}")
+        t_ch, data_ch, sr_ch = load_tap_csv(csv_path)
+        if sr_ch <= 0 and len(t_ch) > 1:
+            sr_ch = 1.0 / float(np.median(np.diff(t_ch)))
+        if sr_ch <= 0:
+            parser.error("Could not determine sample rate from CSV")
+        signal = np.sqrt(data_ch[0] ** 2 + data_ch[1] ** 2 + data_ch[2] ** 2)
+        chatter_result = assess_chatter(
+            signal,
+            sr_ch,
+            fn,
+            natural_freq_uncertainty_hz=getattr(args, "natural_freq_uncertainty_hz_chatter", None),
+            n_teeth=args.flute_count if args.flute_count > 0 else None,
+            rpm=getattr(args, "rpm_chatter", None),
+        )
+        print("Chatter assessment (cutting recording):")
+        print(f"  Natural frequency (tap test): {chatter_result.natural_freq_hz:.1f} Hz  band: [{chatter_result.natural_freq_band_hz[0]:.1f}, {chatter_result.natural_freq_band_hz[1]:.1f}] Hz")
+        print(f"  Dominant frequency in signal: {chatter_result.dominant_freq_hz:.1f} Hz")
+        if chatter_result.peak_near_natural_hz is not None:
+            print(f"  Peak in natural-freq band: {chatter_result.peak_near_natural_hz:.1f} Hz")
+        print(f"  Chatter likely: {'Yes' if chatter_result.is_chatter_likely else 'No'}")
+        if chatter_result.peaks:
+            print("  Top peaks (Hz): " + ", ".join(f"{f:.0f}" for f, _ in chatter_result.peaks[:5]))
+        if chatter_result.suggested_rpm:
+            print("  Suggested spindle speeds (stability lobes): " + ", ".join(f"{r:.0f}" for r in chatter_result.suggested_rpm[:4]) + " rpm")
+        chatter_plot = getattr(args, "chatter_plot_out", None)
+        if chatter_plot is not None or chatter_result.is_chatter_likely:
+            freqs_ch, mag_ch = fft_magnitude_spectrum(signal, sr_ch)
+            out_path = chatter_plot or (csv_path.parent / f"{csv_path.stem}_chatter_spectrum.png")
+            plot_chatter_spectrum_figure(freqs_ch, mag_ch, chatter_result, output_path=out_path)
+            print(f"  Chatter spectrum saved to {out_path}")
+        return
 
     # Feed/RPM/chip-load calculator: give two of the three to get the third (F = fz × Nt × RPM).
     calc_rpm = getattr(args, "calc_rpm", None)
