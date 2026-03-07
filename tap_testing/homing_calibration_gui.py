@@ -50,8 +50,8 @@ _MPS2_TO_G = 1.0 / 9.80665
 
 # Max points to show in the X/Y trail (longer trail = better motion visual)
 _PLOT_TRAIL_LEN = 8000
-# Axis range for live plot (g); homing motion typically well under ±2.5 g
-_PLOT_RANGE_G = 2.5
+# Axis range for live plot (g); homing motion often under ±0.5 g, 1.5 g scale for visibility
+_PLOT_RANGE_G = 1.5
 
 logger = logging.getLogger(__name__)
 
@@ -247,9 +247,10 @@ def run_homing_calibration_gui(
             rate = float(rate_var.get())
         except ValueError:
             rate = sample_rate_hz
-        out_dir.mkdir(parents=True, exist_ok=True)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        output_path = out_dir / f"homing_{timestamp}.csv"
+        run_dir = out_dir / timestamp
+        run_dir.mkdir(parents=True, exist_ok=True)
+        output_path = run_dir / "homing.csv"
 
         recording_active = True
         if live_plot_timer_id is not None:
@@ -259,7 +260,7 @@ def run_homing_calibration_gui(
             root.after_cancel(clear_plot_timer_id)
             clear_plot_timer_id = None
 
-        status_var.set("Recording… Run homing on the machine (Z up, then X Y home). Click Stop when done.")
+        status_var.set(f"Recording… Saving to {run_dir.name}/homing.csv — Run homing on the machine (Z up, then X Y home). Click Stop when done.")
         start_btn.config(state=tk.DISABLED, text="Recording…")
         stop_btn.config(state=tk.NORMAL)
         live_var.set("Live: streaming…")
@@ -435,7 +436,7 @@ def main() -> None:
         "-o", "--output-dir",
         type=Path,
         default=None,
-        help="Output directory for CSV (default: data/live_spindle/homing)",
+        help="Base output directory; each run is saved as <output-dir>/<YYYYmmdd_HHMMSS>/homing.csv (default: data/live_spindle/homing)",
     )
     parser.add_argument("-r", "--rate", type=float, default=None, help="Sample rate (Hz)")
     args = parser.parse_args()

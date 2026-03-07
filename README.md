@@ -266,13 +266,13 @@ tap-testing/
       transducers.py  # Transducer nutshell summaries
       milling_dynamics.py  # Milling dynamics nutshell summaries
   tests/              # Pytest suite (synthetic data; no hardware)
-  data/               # Sampling output (git-ignored): tap CSVs, data/cycle/<timestamp>/, homing
+  data/               # Sampling output (git-ignored): tap CSVs, data/cycle/<timestamp>/, data/live_spindle/homing/<timestamp>/
   example_output/     # Example chart output (optional, from docs.generate_example_chart)
 ```
 
 ## Data format
 
-Recorded CSVs have header `t_s, ax_g, ay_g, az_g`, a comment line `# sample_rate_hz, <value>`, then one row per sample. Analysis uses this to infer sample rate and run the FFT. Sampling output (tap CSVs, cycle runs, homing recordings) is written under `data/`; that directory is git-ignored.
+Recorded CSVs have header `t_s, ax_g, ay_g, az_g`, a comment line `# sample_rate_hz, <value>`, then one row per sample. Analysis uses this to infer sample rate and run the FFT. Sampling output (tap CSVs, cycle runs, homing recordings) is written under `data/`. Each homing run is saved in a timestamped directory `data/live_spindle/homing/<YYYYmmdd_HHMMSS>/homing.csv` so scripts can reference the run by timestamp. The `data/` directory is git-ignored.
 
 ## License
 
