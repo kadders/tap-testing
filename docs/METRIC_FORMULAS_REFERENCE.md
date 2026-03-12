@@ -28,6 +28,22 @@ These use **RPM** (revolutions per minute) and **Hz**; the textbook typically us
 | τ = 60/(Ω·Nt) (s), tooth period | `tooth_period_s(rpm, n_teeth)` | Ω in rpm. |
 | dt = 60/(steps_rev·Ω) (s) | `simulation_time_step_s(steps_per_rev, rpm)` | Simulation time step. |
 
+### RPS vs RPM (ref vs code)
+
+The textbook uses **Ω in rev/s (rps)** in Eqs. 3.6, 4.24, 4.110 (e.g. fc/Ω = N + ε/(2π)). We use **rpm** everywhere in the API and in saved values.
+
+| Conversion | Formula | Use in code |
+|------------|---------|-------------|
+| **rpm → rev/s (Hz)** | Ω_rps = Ω_rpm / 60 | `spindle_hz = reference_rpm / 60.0`; compare to `spindle_operating_frequency_hz` |
+| **rev/s (Hz) → rpm** | Ω_rpm = Ω_rps × 60 | `config.rpm_from_spindle_frequency_hz(freq_hz)`; `base_rpm = spindle_freq_hz * 60.0` |
+
+**Verification (end values):**
+
+- **Tooth passing:** f_tooth (Hz) = rpm × Nt / 60 → e.g. 7500 rpm, 4 teeth → 500 Hz ✓  
+- **Avoid RPM:** rpm = 60×fn/(Nt×k) → e.g. fn=500 Hz, Nt=4, k=1 → 7500 rpm ✓  
+- **Best lobe speed:** Ω_rpm = fn×60/((N+1)×Nt) → e.g. fn=500 Hz, N=0, Nt=4 → 7500 rpm ✓ (ref Eq. 4.29; ref uses Ω_rps = fn/((N+1)×Nt) then ×60 for rpm)  
+- **Spindle reference:** 400 Hz (rev/s) → 400×60 = 24000 rpm ✓
+
 ---
 
 ## 3. Stability lobe speeds (avoid RPM and best speeds)
@@ -91,8 +107,14 @@ Textbooks often give **kt, kn** in **lb/in²** (psi) or N/mm². We use **N/mm²*
 
 | Textbook | Our implementation | Conversion |
 |----------|--------------------|------------|
-| blim = 1/(2·Ks·Re[FRF_orient]·Nt*) | `compute_stability_lobe_boundary` in `analyze.py` | Ks in **N/mm²**; FRF in consistent length/force units (e.g. mm/N); blim in **mm**. |
+| blim = −1/(2·Ks·Re[FRF_orient]·Nt*) (valid when Re[FRF_orient] < 0) | `compute_stability_lobe_boundary` in `analyze.py` | Ks in **N/mm²**; FRF in consistent length/force units (e.g. mm/N); blim in **mm**. |
 | Ks, β from material/tests | Cutting coefficients | If Ks given in lb/in², × 0.006895 → N/mm². |
+| Oriented FRF: μx, μy from β and φave (up milling Fig. 4.74; down milling Fig. 4.24, Ex. 4.4) | `directional_factors_up_milling`, `directional_factors_down_milling` in `milling_dynamics.py` | Use `up_milling=True/False` or infer from φs, φe in `compute_stability_lobe_boundary`. |
+
+**Conventions (ref vs code):**
+
+- **Spindle speed in ref:** Eqs. 3.6, 4.24, 4.110 use **Ω in rev/s (rps)**. We use **rpm** everywhere; Ω_rpm = 60·Ω_rps (e.g. best speed fn·60/((N+1)·Nt) in rpm).
+- **Phase ε (Eq. 4.110):** We use ε = 2π − 2·atan2(Im, Re) (argument of FRF). The textbook may write tan⁻¹(Re/Im) or tan⁻¹(Im/Re); the relationship is equivalent modulo quadrant. See `stability_lobe_phase_epsilon_rad` in `milling_dynamics.py`.
 
 ---
 

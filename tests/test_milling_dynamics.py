@@ -14,6 +14,7 @@ from tap_testing.milling_dynamics import (
     coefficient_of_determination_r2,
     cutting_coefficients_from_slotting_regression,
     cutting_speed_m_per_s,
+    directional_factors_down_milling,
     directional_factors_up_milling,
     ball_forces_xyz_N,
     ball_kappa_prime_rad,
@@ -145,6 +146,36 @@ class TestHelicalLagAndConstantForceDepth:
 
     def test_zero_helix_constant_force_depth_returns_zero(self):
         assert constant_force_axial_depth_mm(19.0, 90.0, 0.0) == 0.0
+
+
+class TestEngagementPercentAtDepthHelix:
+    """Engagement % = 100 * min(1, lag/tooth_pitch) at given depth and helix."""
+
+    def test_at_constant_force_depth_100_percent(self):
+        from tap_testing.milling_dynamics import engagement_percent_at_depth_helix
+        b_const = constant_force_axial_depth_mm(19.0, 90.0, 45.0)
+        assert engagement_percent_at_depth_helix(b_const, 19.0, 4, 45.0) == pytest.approx(100.0)
+
+    def test_below_constant_force_depth_less_than_100(self):
+        from tap_testing.milling_dynamics import engagement_percent_at_depth_helix
+        b_const = constant_force_axial_depth_mm(19.0, 90.0, 45.0)
+        b_half = b_const * 0.5
+        assert engagement_percent_at_depth_helix(b_half, 19.0, 4, 45.0) == pytest.approx(50.0, abs=2.0)
+
+    def test_zero_helix_returns_100(self):
+        from tap_testing.milling_dynamics import engagement_percent_at_depth_helix
+        assert engagement_percent_at_depth_helix(5.0, 19.0, 4, 0.0) == 100.0
+
+
+class TestEngagementVsLobeIndexData:
+    def test_returns_lobe_index_rpm_engagement_tuples(self):
+        from tap_testing.milling_dynamics import engagement_vs_lobe_index_data
+        data = engagement_vs_lobe_index_data(500.0, 4, 19.0, 10.0, 45.0, n_lobes=3)
+        assert len(data) == 3
+        for n, (idx, rpm, eng_pct) in enumerate(data):
+            assert idx == n
+            assert rpm > 0
+            assert 0 <= eng_pct <= 100
 
 
 class TestMillingHelicalTeethNutshell:
@@ -521,6 +552,24 @@ class TestDirectionalFactorsUpMilling:
         a_rad = math.radians(60.0)
         expected_mu_x = math.cos(a_rad - math.radians(70.0)) * math.cos(a_rad)
         assert mu_x == pytest.approx(expected_mu_x)
+
+
+class TestDirectionalFactorsDownMilling:
+    """Ref Fig. 4.24, Example 4.4: 50% radial immersion down milling, φave=135°."""
+
+    def test_returns_two_factors(self):
+        mu_x, mu_y = directional_factors_down_milling(70.0, 135.0)
+        assert isinstance(mu_x, float) and isinstance(mu_y, float)
+
+    def test_50_percent_phi_ave_135_force_angle_70(self):
+        # μx = cos(45+β)*cos(45), μy = cos(β−45)*cos(45) (ref Example 4.4)
+        mu_x, mu_y = directional_factors_down_milling(70.0, 135.0)
+        a_rad = math.radians(45.0)
+        beta_rad = math.radians(70.0)
+        expected_mu_x = math.cos(beta_rad + a_rad) * math.cos(a_rad)
+        expected_mu_y = math.cos(beta_rad - a_rad) * math.cos(a_rad)
+        assert mu_x == pytest.approx(expected_mu_x)
+        assert mu_y == pytest.approx(expected_mu_y)
 
 
 class TestNormalVelocityFromXy:

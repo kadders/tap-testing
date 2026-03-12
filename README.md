@@ -60,12 +60,18 @@ See `tests/` for what is covered: CSV load/save, FFT dominant frequency, RPM avo
 
 ## Usage
 
+To see all available commands from the start:
+
+```bash
+python -m tap_testing --help
+```
+
 **Recording and analysis**
 
 - **Record a tap**: `python -m tap_testing.record_tap` — records for a fixed duration, saves CSV to `data/tap_001.csv` by default. Use `-o`, `-d`, `-r` for output path, duration, and sample rate.
 - **Run 3-tap cycle (recommended)**: `python -m tap_testing.run_cycle` — runs 3 tap tests 5 s apart (configurable with `-s`), combines the data, analyzes, and shows/saves the RPM chart. Optional **status LED** on a Pi GPIO: **ON = tap now**, **OFF = wait**. Output goes to `data/cycle/<timestamp>/`.
 - **Tap cycle with GUI (Pi)**: `python -m tap_testing.cycle_gui` or `python -m tap_testing.run_cycle --gui` — opens a window showing **live status** (e.g. "Tap 1/3 — TAP the tool now", "Waiting 15 s…") and, when done, the **RPM band chart** (red = avoid, green = optimal) in the same window. Same LED and output dir as run_cycle. **Desktop shortcut**: see [docs/DESKTOP_SHORTCUT.md](docs/DESKTOP_SHORTCUT.md) for Windows and Linux.
-- **Homing calibration GUI**: `python -m tap_testing.homing_calibration_gui` — records a single stream of ADXL data while the machine runs its homing sequence (Z up, then X/Y home). Use to capture motion and direction for spindle-mounted accelerometer calibration. Shows live X/Y plot; does not use Moonraker or Klippy. See [docs/ADXL345_WIRING.md](docs/ADXL345_WIRING.md) for wiring.
+- **Homing calibration GUI**: `python -m tap_testing.homing_gui` — records a single stream of ADXL data while the machine runs its homing sequence (Z up, then X/Y home). Use to capture motion and direction for spindle-mounted accelerometer calibration. Shows live X/Y plot; does not use Moonraker or Klippy. See [docs/ADXL345_WIRING.md](docs/ADXL345_WIRING.md) for wiring.
 - **Analyze and get speed/feed guidance**: `python -m tap_testing.analyze data/tap_001.csv --flutes 4 --max-rpm 24000 --tool-diameter 6` — prints natural frequency, RPMs to avoid, and a suggested stable RPM range. To analyze a past cycle run use the combined CSV: `python -m tap_testing.analyze data/cycle/<timestamp>/combined.csv --flutes 4 --max-rpm 24000 --plot`. Use `--plot` to show a chart (red = avoid, green = optimal) or `--plot-out file.png` to save it. Use `--plot-spectrum` or `--plot-spectrum-out file.png` to generate the FFT magnitude spectrum (impact-test analysis: verify dominant peak). Use `--chip-load` for example feed. For the **recommended order** of analysis and all visualizations (time signal → spectrum → FRF when force → RPM/optimal loads/resonance map → milling dynamics), use `--workflow` or `--plot-all` and see **[docs/ANALYSIS_WORKFLOW.md](docs/ANALYSIS_WORKFLOW.md)**.
 - **Chatter identification (cutting recording)**: Record accelerometer data **during a cut** (same CSV format: `t_s`, `ax_g`, `ay_g`, `az_g`). Then run `python -m tap_testing.analyze data/cut_001.csv --chatter --natural-freq 920 --flutes 4` (use your tap-test natural frequency for `--natural-freq`). The tool reports whether a significant peak falls in the natural-frequency band (chatter likely), the dominant and top peaks, and suggested spindle speeds from the stability-lobe formula. Use `--chatter-plot-out file.png` to save the spectrum with fn band and peaks marked; use `--rpm` to pass the spindle RPM during the cut for tooth-passing context. See **[docs/CHATTER_IDENTIFICATION.md](docs/CHATTER_IDENTIFICATION.md)** for the full workflow.
 
@@ -243,7 +249,7 @@ tap-testing/
     tap_cycle.py      # Combine taps, extract cycle, background subtraction
     run_cycle.py      # 3-tap cycle: record → combine → analyze → plot (optional LED)
     cycle_gui.py      # Same cycle with GUI: live status + embedded RPM chart
-    homing_calibration_gui.py  # Record stream during machine homing (spindle-mount calibration)
+    homing_gui.py             # Record stream during machine homing (spindle-mount calibration)
     analyze.py        # FFT, natural frequency, RPM/feed guidance, chart generation
     material.py       # Workpiece materials (6061 aluminum default), metric units
     measurement_uncertainties.py  # FFT resolution, tap spread, FRF corrections

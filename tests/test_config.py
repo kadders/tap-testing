@@ -3,7 +3,7 @@ Tests for tap_testing.config defaults and env overrides.
 """
 import pytest
 
-from tap_testing.config import TapTestConfig, get_config
+from tap_testing.config import TapTestConfig, get_config, rpm_from_spindle_frequency_hz
 
 
 class TestGetConfig:
@@ -40,6 +40,15 @@ class TestGetConfig:
         cfg = get_config()
         assert cfg.spi_bus == 0
         assert cfg.spi_device == 0
+
+    def test_default_spindle_operating_frequency_hz(self):
+        cfg = get_config()
+        assert cfg.spindle_operating_frequency_hz == 400.0
+
+    def test_rpm_from_spindle_frequency_rev_s_to_rpm(self):
+        # 400 rev/s (Hz) → 24000 rpm; ref uses Ω in rev/s, we use rpm = freq_hz * 60
+        assert rpm_from_spindle_frequency_hz(400.0) == pytest.approx(24000.0)
+        assert rpm_from_spindle_frequency_hz(1.0) == pytest.approx(60.0)
 
 
 class TestGetConfigEnvOverrides:

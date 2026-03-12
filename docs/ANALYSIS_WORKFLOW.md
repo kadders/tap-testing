@@ -11,9 +11,9 @@ This document defines the **recommended order** to work through tap-test data so
 | **Time signal map** | Tap CSV (t, ax, ay, az) | Verify clean impact, decay, no clipping; qualitative ζ |
 | **FFT spectrum** | Tap CSV + analyzed fn | Confirm dominant peak at f_n; spot other modes |
 | **FRF** (optional) | Tap CSV **with force** (Fx_N, Fy_N) | Full frequency response → enables blim(Ω) |
-| **RPM chart** | f_n, flutes, min/max RPM | Avoid bands + suggested range + best lobe markers |
+| **RPM chart** | f_n, flutes, min/max RPM | Avoid bands + suggested range (overall tooling RPM) |
 | **Optimal loads** | f_n, flutes, chip load | Feed (mm/min) at lobe speeds and suggested range |
-| **Resonance map** | f_n, flutes, diameter, optional helix | RPM vs axial depth; radial immersion table; constant-force depth |
+| **Resonance map** | f_n, flutes, diameter, optional helix | RPM vs axial depth; radial immersion table; constant-force depth; when helix set, **engagement % vs lobe** table and optional figure |
 | **Milling dynamics** | f_n, flutes, material | Text summary: fn, avoid, lobes, tooth-pass formula |
 | **Stability lobe blim(Ω)** (optional) | **FRF** + Ks, β, immersion | Limiting depth vs speed (when force was measured) |
 
@@ -37,9 +37,9 @@ Use this order so each step builds on the previous and you don’t repeat work.
 
 ### Step 1: Data quality (time domain)
 
-1. **Time signal map** — magnitude and x/y/z vs time, decay envelope, Tn markers.
-   - **Why first:** Confirms the tap is clean, decay is visible, and axes look reasonable before trusting f_n.
-   - **CLI:** `--plot-time-signal` / `--plot-time-signal-out`
+1. **Time signal map** — magnitude and x/y/z vs time; for tap test: decay envelope and Tn markers; for **live spindle** data: continuous signal only (no decay/Tn).
+   - **Why first:** Confirms the tap is clean, decay is visible, and axes look reasonable before trusting f_n. When data is from a **live spindle** (continuous recording), use `--live-spindle` so the time signal is shown without tap-specific markers and the full recording is analyzed.
+   - **CLI:** `--plot-time-signal` / `--plot-time-signal-out`; add `--live-spindle` when the CSV is from a live spindle dataset rather than a tap test.
 
 ### Step 2: Identify dynamics (frequency domain)
 
@@ -56,13 +56,13 @@ Use this order so each step builds on the previous and you don’t repeat work.
 
 ### Step 4: RPM and feed guidance (no FRF required)
 
-4. **RPM chart** — avoid bands (red), suggested range (green), **practical at spindle** band (dark green, when spindle frequency is set), best lobe speeds (blue), reference RPM (purple).
+4. **RPM chart** — avoid bands (red), suggested range (green), **practical at spindle** band (dark green, when spindle frequency is set), reference RPM (purple). Tool calculations use **overall tooling RPM** (suggested range) for simplicity; per-lobe data is available in the resonance map and engagement vs lobe figure.
 5. **Optimal loads** — RPM bands (with practical-at-spindle band), **feed vs RPM** (chip-load bands by tooling), and feed table. When spindle operating frequency is set (e.g. 400 Hz), optimal speeds are **spindle-aligned** (rpm = spindle_freq × 60 / k: 24000, 12000, 8000, … rpm) so they line up with what the spindle can run; thin dashed lines show theoretical lobe (N) positions for comparison.
-6. **Resonance map** — RPM vs axial depth (avoid/suggested), radial immersion table (Nt*, φs, φe), constant-force depth line if `--helix` set.
+6. **Resonance map** — RPM vs axial depth (avoid/suggested), radial immersion table (Nt*, φs, φe), constant-force depth line if `--helix` set. When `--helix` is set, the table includes **engagement % vs lobe index** at constant-force depth, and a separate **engagement vs lobe** figure is saved (`<stem>_engagement_vs_lobe.png`): **lobe engagement on a linear RPM scale** (X = rpm, Y = engagement % at that depth). A set RPM (from `--reference-rpm` or spindle frequency) is marked so you can see variations as you get more data.
 
    - **Why together:** They all use the same inputs (f_n, flutes, diameter, helix, chip load). Viewing them in sequence gives: which RPMs to avoid → which speeds are best → how depth and width (immersion) interact with resonance.
 
-   - **CLI:** Default save for RPM + optimal loads; add `--plot-resonance-map`, `--helix`, `--max-depth` for the resonance map.
+   - **CLI:** Default save for RPM + optimal loads; add `--plot-resonance-map`, `--helix`, `--max-depth` for the resonance map and (when helix set) the engagement vs lobe plot.
 
 ### Step 5: Summary and (optional) full stability lobe
 
@@ -88,17 +88,20 @@ python -m tap_testing.analyze data/cycle/<run_id>/combined.csv \
   --workflow
 ```
 
-Use `--reference-rpm 18000` to force a specific reference RPM; otherwise the reference is taken from `--spindle-frequency` (default 400 Hz → 24000 rpm).
+Use `--reference-rpm 18000` to force a specific reference RPM; otherwise the reference is taken from `--spindle-frequency` (default 400 Hz → 24000 rpm). Use `--live-spindle` when the CSV is from a **live spindle** recording (continuous) rather than a tap test; the time signal then shows magnitude/axes only (no decay envelope or Tn markers) and the full recording is analyzed.
 
-`--workflow` turns on all plot outputs and generates them in this order:
+`--workflow` and `--plot-all` turn on all plot outputs and generate them in this order:
 
-1. Time signal map  
-2. Spectrum  
-3. FRF (if force columns present)  
-4. RPM chart + optimal loads + resonance map  
-5. Milling dynamics summary  
+1. Time signal map → `<stem>_time_signal.png`  
+2. Spectrum → `<stem>_spectrum.png`  
+3. FRF (if force columns present, or rough FRF with `--hammer-mass`) → `<stem>_frf.png`  
+4. RPM chart → `<stem>_rpm_chart.png`  
+5. Optimal loads (feed table) → `<stem>_optimal_loads.png`  
+6. Feeds & speeds by stepover → `<stem>_feeds_speeds_stepover.png`  
+7. Resonance map → `<stem>_resonance_map.png`  
+8. Milling dynamics summary → `<stem>_milling_dynamics.png`  
 
-Files are written next to the CSV (e.g. `combined_time_signal.png`, `combined_spectrum.png`, …). Use `--no-save-chart` to skip saving the default RPM/optimal-loads only; with `--workflow` you still get the workflow figures.
+Files are written next to the CSV. With `--no-save-chart`, the default single-chart save is skipped; with `--workflow` or `--plot-all` all of the above are still saved to their `<stem>_*.png` paths. Stability lobe (blim vs Ω) is not wired to the CLI; use `compute_stability_lobe_boundary` and `plot_stability_lobe_figure` in code when you have FRF and cutting coefficients.
 
 ---
 

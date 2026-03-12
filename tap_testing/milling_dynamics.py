@@ -51,7 +51,7 @@ only teeth with φs ≤ φj ≤ φe contribute. Slotting with an even number of 
 Nt > 2 yields constant cutting force.
 
 Stability lobe diagrams (Sect. 4.3): Tlusty’s average-tooth-angle approach makes
-the system time-invariant; the limiting chip width is blim = 1/(2·Ks·Re[FRF_orient]·Nt*),
+the system time-invariant; the limiting chip width is blim = −1/(2·Ks·Re[FRF_orient]·Nt*) (valid when Re[FRF_orient] < 0),
 with Nt* = (φe − φs)/360 · Nt the average number of teeth in cut. The oriented FRF
 is FRF_orient = μx·FRFx + μy·FRFy (directional factors μx, μy depend on radial immersion
 and force angle β). Best spindle speeds (rpm) are Ω_best = fn·60/((N+1)·Nt) for
@@ -119,7 +119,10 @@ __all__ = [
     "coefficient_of_determination_r2",
     "constant_force_axial_depth_mm",
     "cutting_coefficients_from_slotting_regression",
+    "engagement_percent_at_depth_helix",
+    "engagement_vs_lobe_index_data",
     "cutting_speed_m_per_s",
+    "directional_factors_down_milling",
     "directional_factors_up_milling",
     "linear_regression_slope_intercept",
     "mean_force_per_rev_slotting_N",
@@ -380,6 +383,34 @@ def stability_lobe_best_spindle_speed_rpm(
     return fn_hz * 60.0 / denom
 
 
+def engagement_vs_lobe_index_data(
+    fn_hz: float,
+    n_teeth: int,
+    diameter_mm: float,
+    axial_depth_mm: float,
+    helix_angle_deg: float,
+    n_lobes: int = 6,
+) -> list[tuple[int, float, float]]:
+    """
+    Per-tooth dataset: (lobe index N, rpm at that lobe, engagement % at given depth).
+
+    Engagement percent is based on helix and axial depth (lag vs tooth pitch);
+    same value for all lobes at that depth. Used to plot engagement % vs lobe index.
+
+    Returns:
+        List of (lobe_index_n, rpm, engagement_percent) for N = 0, 1, ..., n_lobes-1.
+    """
+    engagement_pct = engagement_percent_at_depth_helix(
+        axial_depth_mm, diameter_mm, n_teeth, helix_angle_deg
+    )
+    out: list[tuple[int, float, float]] = []
+    for n in range(n_lobes):
+        rpm = stability_lobe_best_spindle_speed_rpm(fn_hz, n_teeth, lobe_index_n=n)
+        if rpm > 0:
+            out.append((n, rpm, engagement_pct))
+    return out
+
+
 def spindle_aligned_rpms(
     spindle_freq_hz: float,
     rpm_min: float,
@@ -419,9 +450,13 @@ def stability_lobe_phase_epsilon_rad(
     """
     Phase ε (rad) between current and previous tooth vibration for stability (Eq. 4.110).
 
-    ε = 2π − 2·atan(Im[FRF_orient] / Re[FRF_orient]). Used to relate chatter frequency
-    fc to spindle speed: fc/(Ω·Nt) = N + ε/(2π). When Re is zero, atan2(Im, Re) gives
-    ±π/2 so ε is well-defined.
+    ε = 2π − 2·atan2(Im[FRF_orient], Re[FRF_orient]). Used to relate chatter frequency
+    fc to spindle speed: fc/(Ω·Nt) = N + ε/(2π), with Ω in rev/s in the ref. When Re is
+    zero, atan2(Im, Re) gives ±π/2 so ε is well-defined.
+
+    Convention: we use atan2(Im, Re), i.e. the argument of the FRF (phase of response
+    relative to force). The textbook may write tan⁻¹(Re/Im) or tan⁻¹(Im/Re) depending on
+    edition; the relationship is equivalent modulo quadrant. See METRIC_FORMULAS_REFERENCE.md.
 
     Args:
         Re_FRF_orient: Real part of the oriented FRF at the chatter frequency.
@@ -571,6 +606,32 @@ def directional_factors_up_milling(
     beta_rad = math.radians(force_angle_beta_deg)
     mu_x = math.cos(math.radians(a) - beta_rad) * math.cos(math.radians(a))
     mu_y = math.cos(math.radians(b_ang) - beta_rad) * math.cos(math.radians(b_ang))
+    return (mu_x, mu_y)
+
+
+def directional_factors_down_milling(
+    force_angle_beta_deg: float,
+    phi_ave_deg: float,
+) -> tuple[float, float]:
+    """
+    Directional factors μx, μy for oriented FRF in down milling (Fig. 4.24, Example 4.4).
+
+    FRF_orient = μx·FRFx + μy·FRFy. For down milling: μx = cos(β + (φave−90°))·cos(φave−90°),
+    μy = cos(β − (φave−90°))·cos(φave−90°). Example: 50% radial immersion (φave = 135°)
+    gives μx = cos(45+β)·cos(45), μy = cos(β−45)·cos(45).
+
+    Args:
+        force_angle_beta_deg: Force angle β (deg).
+        phi_ave_deg: Average tooth angle φave (deg).
+
+    Returns:
+        (μx, μy).
+    """
+    a_deg = phi_ave_deg - 90.0  # angle from x to surface normal
+    a_rad = math.radians(a_deg)
+    beta_rad = math.radians(force_angle_beta_deg)
+    mu_x = math.cos(beta_rad + a_rad) * math.cos(a_rad)
+    mu_y = math.cos(beta_rad - a_rad) * math.cos(a_rad)
     return (mu_x, mu_y)
 
 
@@ -1013,6 +1074,38 @@ def helical_lag_angle_deg(
     gamma_rad = math.radians(helix_angle_deg)
     chi_rad = 2.0 * axial_depth_mm * math.tan(gamma_rad) / diameter_mm
     return math.degrees(chi_rad)
+
+
+def engagement_percent_at_depth_helix(
+    axial_depth_mm: float,
+    diameter_mm: float,
+    n_teeth: int,
+    helix_angle_deg: float,
+) -> float:
+    """
+    Engagement percent at a given axial depth for a helical tool (lag vs tooth pitch).
+
+    Engagement = 100 * min(1, χ/φp), where χ is the lag angle at depth b and φp is tooth pitch.
+    At b = constant_force_axial_depth_mm we get 100%; below that, proportionally less.
+    Used for per-tooth engagement vs lobe index at a given depth.
+
+    Args:
+        axial_depth_mm: Axial depth of cut b (mm).
+        diameter_mm: Cutter diameter d (mm).
+        n_teeth: Number of teeth Nt (tooth_pitch = 360/Nt).
+        helix_angle_deg: Helix angle γ in degrees.
+
+    Returns:
+        Engagement percent 0–100. Returns 100 if helix is 0 (no lag) or depth/diameter invalid.
+    """
+    if n_teeth <= 0 or diameter_mm <= 0 or axial_depth_mm <= 0:
+        return 100.0
+    if helix_angle_deg <= 0:
+        return 100.0
+    tooth_pitch_deg = 360.0 / n_teeth
+    lag_deg = helical_lag_angle_deg(helix_angle_deg, axial_depth_mm, diameter_mm)
+    ratio = lag_deg / tooth_pitch_deg
+    return min(100.0, 100.0 * ratio)
 
 
 def constant_force_axial_depth_mm(

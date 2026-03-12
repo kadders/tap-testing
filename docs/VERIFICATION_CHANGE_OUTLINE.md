@@ -110,12 +110,13 @@ This document outlines **what to change** in the tap-testing codebase if verific
 
 ---
 
-## 10. Stability boundary blim (Sect. 4.3)
+## 10. Stability boundary blim (Sect. 4.3, Eq. 4.23, 4.109)
 
 | Item | Reference | Our implementation | If wrong, change |
 |------|-----------|--------------------|------------------|
-| **blim formula** | blim = 1/(2·Ks·Re[FRF_orient]·Nt*); blim in mm. | `compute_stability_lobe_boundary` in `analyze.py`; blim_mm. | In `analyze.py`: fix formula, sign of Re[FRF], or Nt* definition. |
+| **blim formula** | blim = **−1**/(2·Ks·Re[FRF_orient]·Nt*); valid when Re[FRF_orient] **< 0**. | **Done:** `compute_stability_lobe_boundary` uses blim = −1/(2·Ks·Re_orient·Nt*); NaN when Re_orient ≥ 0. | See `docs/REFERENCE_ALIGNMENT_ANALYSIS.md` ("Where these changes apply"). |
 | **Nt*** | Nt* = (φe−φs)/360·Nt (average teeth in cut). | `average_teeth_in_cut(phi_s_deg, phi_e_deg, n_teeth)` | In `milling_dynamics.py`: fix if ref defines Nt* differently. |
+| **Down-milling μx, μy** | Ref Example 4.4 (50% down): μx = cos(45+β)·cos(45), μy = cos(β−45)·cos(45). | Only `directional_factors_up_milling` implemented. | Add `directional_factors_down_milling` (or unified by φs/φe) and use in stability lobe when cut is down milling. |
 
 **Files:** `tap_testing/analyze.py`, `tap_testing/milling_dynamics.py`.
 

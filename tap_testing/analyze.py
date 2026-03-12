@@ -147,15 +147,17 @@ def _tap_file_sort_key(path: Path) -> int:
     return int(m.group(1)) if m else 0
 
 
-def discover_cycle_directory(cycle_dir: Path) -> tuple[Path | None, list[Path], Path]:
+def discover_cycle_directory(cycle_dir: Path) -> tuple[Path | None, list[Path], Path | None, Path]:
     """
-    Discover tap and combined CSVs in a cycle run directory (e.g. data/cycle/20250303_120000).
+    Discover tap, combined, and homing CSVs in a cycle run directory (e.g. data/cycle/20250303_120000).
 
-    Looks for tap_1.csv, tap_2.csv, ... and combined.csv (as produced by run_cycle / cycle_gui).
+    Looks for tap_1.csv, tap_2.csv, ... and combined.csv (as produced by run_cycle / cycle_gui),
+    and homing.csv (as produced by homing_gui).
 
     Returns:
         combined_path: Path to combined.csv if present, else None.
         tap_paths: Sorted list of tap_*.csv paths (by numeric index).
+        homing_path: Path to homing.csv if present, else None.
         output_base: Path with .parent = cycle_dir and .stem = cycle_dir.name, for output filenames.
     """
     if not cycle_dir.is_dir():
@@ -163,8 +165,10 @@ def discover_cycle_directory(cycle_dir: Path) -> tuple[Path | None, list[Path], 
     tap_paths = sorted(cycle_dir.glob("tap_*.csv"), key=_tap_file_sort_key)
     combined_path = cycle_dir / "combined.csv"
     combined_path = combined_path if combined_path.exists() else None
+    homing_path = cycle_dir / "homing.csv"
+    homing_path = homing_path if homing_path.exists() else None
     output_base = cycle_dir / cycle_dir.name  # .parent = cycle_dir, .stem = cycle_dir.name
-    return combined_path, tap_paths, output_base
+    return combined_path, tap_paths, homing_path, output_base
 
 
 def combine_tap_csvs(paths: list[Path]) -> tuple[np.ndarray, np.ndarray, float]:
@@ -357,9 +361,10 @@ def dominant_frequency(
     axis_label: str = "magnitude",
 ) -> float:
     """
-    One-sided FFT and return frequency (Hz) of the largest magnitude bin.
+    One-sided FFT over the **entire** signal; return frequency (Hz) of the largest magnitude bin.
 
-    Uses the first half of the signal if length is even to avoid DC/nyquist issues.
+    The FFT is computed on the full-duration signal (after demean and Hanning window), so the
+    result reflects the dominant frequency content over the whole record, not just the start.
     """
     n = len(signal)
     if n < 4:
@@ -377,6 +382,56 @@ def dominant_frequency(
         return 0.0  # No meaningful frequency content
     idx = skip + np.argmax(mag_fft)
     return float(freqs[idx])
+
+
+def dominant_frequency_over_duration(
+    signal: np.ndarray,
+    sample_rate_hz: float,
+    axis_label: str = "magnitude",
+    n_windows: int = 5,
+    min_samples_per_window: int = 256,
+) -> float:
+    """
+    Dominant frequency representing the **overall common vibration** over the full dataset.
+
+    Splits the signal into non-overlapping segments (windows), computes the dominant
+    frequency in each segment, and returns the median. This avoids biasing the result
+    toward the start of the record (e.g. initial tap transient) and emphasizes the
+    frequency that persists across the duration. If the signal is too short to window
+    meaningfully, falls back to a single FFT over the full signal.
+
+    Args:
+        signal: Time-series (e.g. magnitude or single axis).
+        sample_rate_hz: Sample rate in Hz.
+        axis_label: For logging only.
+        n_windows: Number of segments to use when signal is long enough.
+        min_samples_per_window: Minimum length per segment for FFT (need enough for resolution).
+
+    Returns:
+        Dominant frequency in Hz (median over windows, or single full-signal result if short).
+    """
+    n = len(signal)
+    if n < 4:
+        return 0.0
+    total_samples_needed = n_windows * min_samples_per_window
+    if n < total_samples_needed:
+        # Signal too short to window; use full-duration FFT (already reflects whole record)
+        return dominant_frequency(signal, sample_rate_hz, axis_label)
+    # Non-overlapping segments
+    segment_length = n // n_windows
+    freqs: list[float] = []
+    for i in range(n_windows):
+        start = i * segment_length
+        end = start + segment_length
+        if end > n:
+            break
+        seg = signal[start:end]
+        f = dominant_frequency(seg, sample_rate_hz, axis_label)
+        if f > 0:
+            freqs.append(f)
+    if not freqs:
+        return dominant_frequency(signal, sample_rate_hz, axis_label)
+    return float(np.median(freqs))
 
 
 def fft_magnitude_spectrum(
@@ -669,6 +724,56 @@ def decay_envelope_and_damping(
     return t, envelope, zeta_est
 
 
+# M593 (RRF input shaping) P parameter values per Duet3D docs; not case-sensitive in RRF.
+# https://docs.duet3d.com/en/User_manual/Reference/Gcodes#m593-configure-input-shaping
+M593_VALID_SHAPER_TYPES = frozenset(
+    {"none", "zvd", "zvdd", "zvddd", "mzv", "ei2", "ei3", "custom"}
+)
+
+
+def format_m593_input_shaping(
+    natural_freq_hz: float,
+    damping_ratio: float | None = None,
+    shaper_type: str = "zvd",
+) -> str:
+    """
+    Build a RepRapFirmware M593 input-shaping line from tap-test natural frequency.
+
+    Parameter mapping is from the official M593 spec (Duet3D GCode reference):
+    - **F** = Centre frequency of ringing to cancel (Hz). RRF uses this to tune the shaper.
+      The tap-test natural frequency is exactly this: the dominant frequency at which the
+      structure rings when excited, so we use natural_freq_hz for F.
+    - **S** = Damping factor of the ringing to be cancelled. RRF default is 0.1; we use
+      that when damping_ratio is not provided (or clamp to (0,1) if provided).
+    - **P** = Shaper type: one of "none", "zvd", "zvdd", "zvddd", "mzv", "ei2", "ei3",
+      "custom" (RRF 3.6). "zvd" is a good default (balance of cancellation and duration).
+
+    See: https://docs.duet3d.com/en/User_manual/Reference/Gcodes#m593-configure-input-shaping
+
+    Args:
+        natural_freq_hz: Natural frequency from tap test (Hz) — used as M593 F parameter.
+        damping_ratio: Optional damping ratio ζ from decay fit; if None, S is set to 0.1.
+        shaper_type: M593 P type (default "zvd"); must be in M593_VALID_SHAPER_TYPES.
+
+    Returns:
+        A single line suitable for config.g, e.g. 'M593 P"zvd" F40.50 S0.1'
+    """
+    if natural_freq_hz <= 0:
+        return 'M593 P"none" ; invalid or missing natural frequency'
+    # RRF 3.6 minimum F is 4 Hz; we still output the value but user can adjust if needed
+    p_type = shaper_type.lower().strip()
+    if p_type not in M593_VALID_SHAPER_TYPES:
+        p_type = "zvd"
+    s = f'M593 P"{p_type}" F{natural_freq_hz:.2f}'
+    # S = damping factor; RRF default 0.1 per docs
+    zeta = damping_ratio if damping_ratio is not None else 0.1
+    if 0 < zeta < 1:
+        s += f" S{zeta:.3f}"
+    else:
+        s += " S0.1"
+    return s
+
+
 def rpm_to_avoid(
     natural_freq_hz: float,
     n_teeth: int,
@@ -913,7 +1018,7 @@ def analyze_tap_data(
         signal = np.sqrt(ax**2 + ay**2 + az**2)
         axis_label = "magnitude"
 
-    natural_freq_hz = dominant_frequency(signal, sample_rate_hz, axis_label)
+    natural_freq_hz = dominant_frequency_over_duration(signal, sample_rate_hz, axis_label)
     n_samples = len(signal)
     u_fft = fft_frequency_resolution_uncertainty_hz(sample_rate_hz, n_samples) if n_samples >= 2 else 0.0
     u_freq_hz = combined_natural_freq_uncertainty_hz(u_fft, tap_spread_std_hz)
@@ -1132,8 +1237,6 @@ def plot_result_figure(
     if material_name is None:
         material_name = get_config().material_name
     get_material_or_default(material_name)  # validate
-    from tap_testing.milling_dynamics import stability_lobe_best_spindle_speed_rpm
-
     rpm_lo_display, rpm_hi_display = chart_rpm_range(result)
     zones = get_rpm_zones(result, avoid_width_fraction=avoid_width_fraction, rpm_min=rpm_lo_display)
     fig, ax = plt.subplots(figsize=figsize)
@@ -1141,7 +1244,7 @@ def plot_result_figure(
         color = "#c0392b" if kind == "avoid" else "#27ae60"  # red / green
         alpha = 0.45 if kind == "avoid" else 0.35
         ax.axvspan(rpm_lo, rpm_hi, color=color, alpha=alpha)
-    # Highlight suggested RPM range (calculated optimal band)
+    # Highlight suggested RPM range (overall tooling RPM band)
     ax.axvline(result.suggested_rpm_min, color="#1e8449", linewidth=2, linestyle="--", alpha=0.9)
     ax.axvline(result.suggested_rpm_max, color="#1e8449", linewidth=2, linestyle="--", alpha=0.9)
     # Practical range at spindle: intersection of suggested with ±10% of spindle RPM (in application spindle is fixed)
@@ -1159,13 +1262,6 @@ def plot_result_figure(
             handles_legend.append(
                 mpatches.Patch(facecolor="#1e8449", alpha=0.35, label=f"Practical at spindle ({spindle_hz:.0f} Hz)")
             )
-    # Best stability lobe speeds (N=0,1,2) as vertical markers with RPM labels
-    n_lobes_plot = 3
-    for n in range(n_lobes_plot):
-        rpm = stability_lobe_best_spindle_speed_rpm(result.natural_freq_hz, result.n_teeth_used, lobe_index_n=n)
-        if rpm_lo_display <= rpm <= rpm_hi_display:
-            ax.axvline(rpm, color="#2980b9", linewidth=1.2, linestyle=":", alpha=0.85)
-            ax.text(rpm, 0.95, f"N{n}\n{rpm:.0f}", fontsize=7, ha="center", va="top", color="#2980b9", fontweight="bold")
     # Reference operating point (e.g. spindle 400 Hz → 24000 RPM)
     if reference_rpm is not None and rpm_lo_display <= reference_rpm <= rpm_hi_display:
         ref_cl = reference_chip_load if reference_chip_load is not None and reference_chip_load > 0 else 0.05
@@ -1188,10 +1284,9 @@ def plot_result_figure(
     ax.set_title("  ·  ".join(title_parts))
     from matplotlib.lines import Line2D
     suggested_line = Line2D([0], [0], color="#1e8449", linewidth=2, linestyle="--", label=f"Suggested: {result.suggested_rpm_min:.0f}–{result.suggested_rpm_max:.0f} rpm")
-    lobe_line = Line2D([0], [0], color="#2980b9", linewidth=1.5, linestyle=":", label="Best lobe (N0,N1,N2)")
     avoid_patch = mpatches.Patch(color="#c0392b", alpha=0.45, label="Avoid (chatter risk)")
     optimal_patch = mpatches.Patch(color="#27ae60", alpha=0.35, label="Optimal")
-    ax.legend(handles=[avoid_patch, optimal_patch, suggested_line, lobe_line] + handles_legend, loc="upper right", fontsize=8)
+    ax.legend(handles=[avoid_patch, optimal_patch, suggested_line] + handles_legend, loc="upper right", fontsize=8)
     ax.set_ylabel(" ")
     fig.tight_layout()
     if output_path:
@@ -1232,7 +1327,6 @@ def plot_feeds_speeds_stepover_figure(
 
     from tap_testing.config import get_config
     from tap_testing.material import default_material_label, get_material_or_default
-    from tap_testing.milling_dynamics import stability_lobe_best_spindle_speed_rpm
     from tap_testing import feeds_speeds as fs
 
     if material_name is None:
@@ -1277,7 +1371,7 @@ def plot_feeds_speeds_stepover_figure(
         3, 1, figsize=figsize, height_ratios=[0.9, 1.2, 1.0], sharex=False
     )
 
-    # Top: RPM band (compact) with suggested range, avoid, ref RPM, lobe markers
+    # Top: RPM band (compact) — overall tooling RPM (suggested range), avoid, ref RPM
     for rpm_lo, rpm_hi, kind in zones:
         color = "#c0392b" if kind == "avoid" else "#27ae60"
         alpha = 0.45 if kind == "avoid" else 0.35
@@ -1293,11 +1387,6 @@ def plot_feeds_speeds_stepover_figure(
                 max(prac_lo, rpm_lo_display), min(prac_hi, rpm_hi_display),
                 color="#1e8449", alpha=0.35, zorder=0,
             )
-    for n in range(3):
-        rpm = stability_lobe_best_spindle_speed_rpm(result.natural_freq_hz, result.n_teeth_used, lobe_index_n=n)
-        if rpm_lo_display <= rpm <= rpm_hi_display:
-            ax_rpm.axvline(rpm, color="#2980b9", linewidth=1, linestyle=":", alpha=0.8)
-            ax_rpm.text(rpm, 0.92, f"N{n}", fontsize=7, ha="center", va="top", color="#2980b9")
     ref_feed = feed_rate_mm_min(ref_cl, result.n_teeth_used, ref_rpm)
     if rpm_lo_display <= ref_rpm <= rpm_hi_display:
         ax_rpm.axvline(ref_rpm, color="#8e44ad", linewidth=2, linestyle="-", alpha=0.95)
@@ -1784,26 +1873,30 @@ def plot_time_signal_figure(
     show_envelope: bool = True,
     show_axes_xyz: bool = True,
     tap_series_list: list[tuple[np.ndarray, np.ndarray]] | None = None,
+    live_spindle: bool = False,
 ) -> "matplotlib.figure.Figure":
     """
-    Plot time-domain tap signal: magnitude (and optional envelope), then x/y/z axes.
+    Plot time-domain signal: magnitude (and optional envelope), then x/y/z axes.
 
-    If tap_series_list is provided, plots each tap (lighter) and the average (bold).
-    Top: magnitude (g) vs time (s) with decay envelope and natural period Tn = 1/fn.
-    Bottom: ax, ay, az (g) vs time in stacked subplots.
+    Supports both tap-test data (decay envelope, Tn markers) and live spindle data
+    (continuous; no envelope/Tn). If tap_series_list is provided (tap test only),
+    plots each tap (lighter) and the average (bold).
     """
     import matplotlib.pyplot as plt
 
+    if live_spindle:
+        show_envelope = False
+
     colors = ["#3498db", "#9b59b6", "#1abc9c"]
     fn = result.natural_freq_hz
-    Tn = 1.0 / fn if fn > 0 else None
+    Tn = 1.0 / fn if (fn > 0 and not live_spindle) else None
     n_rows = 2 if show_axes_xyz else 1
     fig, axes = plt.subplots(n_rows, 1, figsize=figsize, sharex=True)
     if n_rows == 1:
         axes = [axes]
     ax_mag = axes[0]
 
-    if tap_series_list and len(tap_series_list) > 0:
+    if tap_series_list and len(tap_series_list) > 0 and not live_spindle:
         n_min = min(d.shape[1] for _, d in tap_series_list)
         magnitudes: list[np.ndarray] = []
         t_plot = None
@@ -1837,14 +1930,17 @@ def plot_time_signal_figure(
         for k in range(2, min(n_periods + 1, 8)):
             ax_mag.axvline(t0 + k * Tn, color="#95a5a6", linestyle=":", linewidth=0.8, alpha=0.7)
     ax_mag.set_ylabel("Magnitude (g)")
-    ax_mag.set_title("Time signal — magnitude (per-tap + average)" if tap_series_list else "Time signal — magnitude (tap response)")
+    if live_spindle:
+        ax_mag.set_title("Time signal — magnitude (live spindle)")
+    else:
+        ax_mag.set_title("Time signal — magnitude (per-tap + average)" if tap_series_list else "Time signal — magnitude (tap response)")
     ax_mag.legend(loc="upper right", fontsize=8)
     ax_mag.grid(True, alpha=0.3)
     ax_mag.set_ylim(bottom=0)
 
     if show_axes_xyz:
         ax_xyz = axes[1]
-        if tap_series_list and len(tap_series_list) > 0:
+        if tap_series_list and len(tap_series_list) > 0 and not live_spindle:
             n_min = min(d.shape[1] for _, d in tap_series_list)
             for i, (t_i, d) in enumerate(tap_series_list):
                 ax_xyz.plot(t_i[:n_min], d[0][:n_min], color="#e74c3c", alpha=0.35, linewidth=0.7)
@@ -1862,14 +1958,17 @@ def plot_time_signal_figure(
             ax_xyz.plot(t, data[1], color="#27ae60", linewidth=0.8, alpha=0.9, label="ay")
             ax_xyz.plot(t, data[2], color="#3498db", linewidth=0.8, alpha=0.9, label="az")
         ax_xyz.set_ylabel("Accel (g)")
-        ax_xyz.set_title("Time signal — x, y, z axes")
+        ax_xyz.set_title("Time signal — x, y, z axes" + (" (live spindle)" if live_spindle else ""))
         ax_xyz.legend(loc="upper right", fontsize=8)
         ax_xyz.grid(True, alpha=0.3)
         ax_xyz.axhline(0, color="#bdc3c7", linewidth=0.5)
 
     axes[-1].set_xlabel("Time (s)")
     duration_s = float(t_use[-1] - t_use[0]) if len(t_use) > 1 else 0.0
-    fig.suptitle(f"Time signal map  ·  f_n = {fn:.1f} Hz  ·  {duration_s*1000:.0f} ms  ·  {sample_rate_hz:.0f} Hz", fontsize=10)
+    if live_spindle:
+        fig.suptitle(f"Time signal map  ·  Live spindle dataset  ·  {duration_s*1000:.0f} ms  ·  {sample_rate_hz:.0f} Hz" + (f"  ·  f_n = {fn:.1f} Hz" if fn > 0 else ""), fontsize=10)
+    else:
+        fig.suptitle(f"Time signal map  ·  f_n = {fn:.1f} Hz  ·  {duration_s*1000:.0f} ms  ·  {sample_rate_hz:.0f} Hz", fontsize=10)
     fig.tight_layout()
     if output_path:
         fig.savefig(output_path, dpi=150, bbox_inches="tight")
@@ -2057,6 +2156,93 @@ def plot_frf_figure(
     return fig
 
 
+def plot_engagement_vs_lobe_figure(
+    result: TapTestResult,
+    axial_depth_mm: float,
+    helix_angle_deg: float,
+    output_path: str | Path | None = None,
+    n_lobes: int = 6,
+    reference_rpm: float | None = None,
+    figsize: tuple[float, float] = (8, 4),
+    material_name: str | None = None,
+) -> "matplotlib.figure.Figure":
+    """
+    Lobe engagement on a linear RPM scale at a given axial depth (helix-based).
+
+    X-axis: spindle speed (rpm), linear scale. Y-axis: engagement % (0–100).
+    Plots engagement at each lobe's RPM so you can see variation across RPM and
+    compare to a set RPM (reference_rpm). As you get more data (depth, helix,
+    tool), the same linear scale lets you compare variations.
+    """
+    import matplotlib.pyplot as plt
+
+    from tap_testing.config import get_config
+    from tap_testing.material import default_material_label, get_material_or_default
+    from tap_testing.milling_dynamics import engagement_vs_lobe_index_data
+
+    if material_name is None:
+        material_name = get_config().material_name
+    get_material_or_default(material_name)
+
+    diameter_mm = result.tool_diameter_mm or 10.0
+    n_teeth = result.n_teeth_used
+    data = engagement_vs_lobe_index_data(
+        result.natural_freq_hz,
+        n_teeth,
+        diameter_mm,
+        axial_depth_mm,
+        helix_angle_deg,
+        n_lobes=n_lobes,
+    )
+    if not data:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.set_title("Lobe engagement vs RPM (no data)")
+        if output_path:
+            fig.savefig(output_path, dpi=150, bbox_inches="tight")
+        return fig
+
+    rpms = [d[1] for d in data]
+    engagement_pcts = [d[2] for d in data]
+    lobe_labels = [f"N{d[0]}" for d in data]
+
+    # Linear RPM scale: use lobe RPM range, optionally extend to include reference_rpm
+    rpm_min = min(rpms)
+    rpm_max = max(rpms)
+    if reference_rpm is not None and reference_rpm > 0:
+        rpm_min = min(rpm_min, reference_rpm)
+        rpm_max = max(rpm_max, reference_rpm)
+    # Add a little margin
+    span = max(rpm_max - rpm_min, 500)
+    x_min = max(0, rpm_min - span * 0.05)
+    x_max = rpm_max + span * 0.05
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.scatter(rpms, engagement_pcts, color="#2980b9", s=80, zorder=3, edgecolors="white", linewidths=1.5, label="Engagement % at lobe RPM")
+    for (n, rpm, pct), lbl in zip(data, lobe_labels):
+        ax.annotate(lbl, (rpm, pct), fontsize=8, ha="center", va="bottom", xytext=(0, 6), textcoords="offset points")
+    ax.set_xlabel("Spindle speed (rpm) — linear scale")
+    ax.set_ylabel("Engagement % (at depth, helix-based)")
+    ax.set_ylim(0, 105)
+    ax.set_xlim(x_min, x_max)
+    ax.axhline(100, color="#27ae60", linewidth=1, linestyle="--", alpha=0.7)
+    if reference_rpm is not None and reference_rpm > 0 and x_min <= reference_rpm <= x_max:
+        ax.axvline(reference_rpm, color="#8e44ad", linewidth=2, linestyle="-", alpha=0.9, label=f"Set RPM {reference_rpm:.0f}")
+        # Engagement at set RPM is the same as at this depth (same depth/helix)
+        eng_at_ref = engagement_pcts[0] if engagement_pcts else 0
+        ax.scatter([reference_rpm], [eng_at_ref], color="#8e44ad", s=120, zorder=4, edgecolors="white", linewidths=2)
+    ax.legend(loc="upper right", fontsize=8)
+    ax.set_title(
+        f"Lobe engagement at depth b = {axial_depth_mm:.1f} mm (helix {helix_angle_deg}°)  ·  "
+        f"fn = {result.natural_freq_hz:.1f} Hz, {n_teeth} fl, Ø{diameter_mm} mm"
+    )
+    ax.grid(True, alpha=0.3)
+    fig.suptitle(f"Lobe engagement vs RPM (linear scale)  ·  {default_material_label(material_name)}", fontsize=11, fontweight="bold", y=1.02)
+    fig.tight_layout()
+    if output_path:
+        fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    return fig
+
+
 def plot_resonance_map_figure(
     result: TapTestResult,
     output_path: str | Path | None = None,
@@ -2083,6 +2269,7 @@ def plot_resonance_map_figure(
     from tap_testing.milling_dynamics import (
         average_teeth_in_cut,
         constant_force_axial_depth_mm,
+        engagement_vs_lobe_index_data,
         exit_angle_up_milling_deg,
         stability_lobe_best_spindle_speed_rpm,
     )
@@ -2155,6 +2342,17 @@ def plot_resonance_map_figure(
         rpm = stability_lobe_best_spindle_speed_rpm(result.natural_freq_hz, n_teeth, lobe_index_n=n)
         if rpm_min <= rpm <= rpm_max:
             lines.append(f"  N{n}: {rpm:.0f}")
+    # Per-tooth engagement % vs lobe index at constant-force depth (when helix set)
+    if helix_angle_deg is not None and helix_angle_deg > 0:
+        b_const = constant_force_axial_depth_mm(diameter_mm, tooth_pitch_deg, helix_angle_deg)
+        if b_const > 0:
+            engagement_data = engagement_vs_lobe_index_data(
+                result.natural_freq_hz, n_teeth, diameter_mm, b_const, helix_angle_deg, n_lobes=4
+            )
+            lines.extend(["", "Engagement % vs lobe (at depth b_const, helix)"])
+            for n, rpm, eng_pct in engagement_data:
+                if rpm_min <= rpm <= rpm_max:
+                    lines.append(f"  N{n}: {rpm:.0f} rpm  {eng_pct:.0f}%")
     lines.extend([
         "",
         "Red bands: tooth-pass resonance (avoid any depth/width).",
@@ -2182,25 +2380,40 @@ def compute_stability_lobe_boundary(
     rpm_max: float,
     fn_nominal_hz: float,
     n_points: int = 200,
+    *,
+    up_milling: bool | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute stability lobe boundary blim (mm) vs spindle speed (rpm).
 
     Uses oriented FRF_orient = μx·Hxx + μy·Hyy at the nominal natural frequency
     (response-only tap test gives fn; full FRF from impact with force gives Hxx, Hyy).
-    blim = 1 / (2·Ks·Re(FRF_orient)·Nt*). Requires x,y FRFs from impact testing with force.
+    Per Eq. 4.23/4.109 (ref): blim = −1 / (2·Ks·Re(FRF_orient)·Nt*). In the valid
+    chatter frequency range Re(FRF_orient) < 0, so the minus sign yields positive blim.
+    Requires x,y FRFs from impact testing with force.
+
+    Directional factors μx, μy depend on cut type: up milling (ref Fig. 4.74, Example 4.5)
+    or down milling (ref Fig. 4.24, Example 4.4). If up_milling is None, it is inferred
+    from phi_s, phi_e (down milling when φe == 180° and φs > 0).
 
     Returns:
         rpm_axis: Spindle speed (rpm), shape (n_points,).
-        blim_mm: Limiting chip width (mm), shape (n_points,). NaN where Re(FRF_orient) <= 0.
+        blim_mm: Limiting chip width (mm), shape (n_points,). NaN where Re(FRF_orient) >= 0 (invalid).
     """
     from tap_testing.milling_dynamics import (
         average_teeth_in_cut,
         average_tooth_angle_deg,
+        directional_factors_down_milling,
         directional_factors_up_milling,
     )
     phi_ave = average_tooth_angle_deg(phi_s_deg, phi_e_deg)
-    mu_x, mu_y = directional_factors_up_milling(force_angle_beta_deg, phi_ave)
+    if up_milling is None:
+        # Down milling: φe = 180° and φs > 0 (ref Sect. 4.1); else up milling
+        up_milling = not (phi_e_deg >= 179.0 and phi_s_deg > 0)
+    if up_milling:
+        mu_x, mu_y = directional_factors_up_milling(force_angle_beta_deg, phi_ave)
+    else:
+        mu_x, mu_y = directional_factors_down_milling(force_angle_beta_deg, phi_ave)
     Nt_star = average_teeth_in_cut(phi_s_deg, phi_e_deg, n_teeth)
     if Nt_star <= 0 or Ks_n_per_mm2 <= 0:
         rpm_axis = np.linspace(rpm_min, rpm_max, n_points)
@@ -2210,9 +2423,10 @@ def compute_stability_lobe_boundary(
     FRF_orient = mu_x * Hxx_interp + mu_y * Hyy_interp
     Re_orient = np.real(FRF_orient)
     rpm_axis = np.linspace(rpm_min, rpm_max, n_points)
-    if Re_orient <= 0:
+    # Valid chatter range: Re(FRF_orient) < 0 (ref Eq. 4.23, 4.109)
+    if Re_orient >= 0:
         return rpm_axis, np.full(n_points, np.nan)
-    blim_mm = 1.0 / (2.0 * Ks_n_per_mm2 * Re_orient * Nt_star)
+    blim_mm = -1.0 / (2.0 * Ks_n_per_mm2 * Re_orient * Nt_star)
     return rpm_axis, np.full(n_points, blim_mm)
 
 
@@ -2277,9 +2491,7 @@ def plot_cycle_result_figure(
         4, 1, figsize=(figsize[0], figsize[1] + 2.4), height_ratios=[1, 1.2, 0.9, 0.85],
     )
 
-    from tap_testing.milling_dynamics import stability_lobe_best_spindle_speed_rpm
-
-    # Top: RPM band chart (extend range so red avoid zones are visible when below min_rpm)
+    # Top: RPM band chart (overall tooling RPM; extend range so red avoid zones visible when below min_rpm)
     rpm_lo_display, rpm_hi_display = chart_rpm_range(result)
     zones = get_rpm_zones(result, avoid_width_fraction=avoid_width_fraction, rpm_min=rpm_lo_display)
     for rpm_lo, rpm_hi, kind in zones:
@@ -2299,13 +2511,6 @@ def plot_cycle_result_figure(
                 max(prac_lo, rpm_lo_display), min(prac_hi, rpm_hi_display),
                 color="#1e8449", alpha=0.35, zorder=0,
             )
-    # Best stability lobe speeds (N=0,1,2) as vertical markers with RPM labels
-    n_lobes_plot = 3
-    for n in range(n_lobes_plot):
-        rpm = stability_lobe_best_spindle_speed_rpm(result.natural_freq_hz, result.n_teeth_used, lobe_index_n=n)
-        if rpm_lo_display <= rpm <= rpm_hi_display:
-            ax_rpm.axvline(rpm, color="#2980b9", linewidth=1.2, linestyle=":", alpha=0.85)
-            ax_rpm.text(rpm, 0.95, f"N{n}\n{rpm:.0f}", fontsize=7, ha="center", va="top", color="#2980b9", fontweight="bold")
     if reference_rpm is not None and reference_rpm > 0 and rpm_lo_display <= reference_rpm <= rpm_hi_display:
         ref_cl = reference_chip_load if reference_chip_load is not None and reference_chip_load > 0 else 0.05
         ref_feed = feed_rate_mm_min(ref_cl, result.n_teeth_used, reference_rpm)
@@ -2326,10 +2531,9 @@ def plot_cycle_result_figure(
     ax_rpm.set_title("  ·  ".join(title_parts))
     from matplotlib.lines import Line2D
     suggested_line = Line2D([0], [0], color="#1e8449", linewidth=2, linestyle="--", label=f"Suggested: {result.suggested_rpm_min:.0f}–{result.suggested_rpm_max:.0f} rpm")
-    lobe_line = Line2D([0], [0], color="#2980b9", linewidth=1.5, linestyle=":", label="Best lobe (N0,N1,N2)")
     avoid_patch = mpatches.Patch(color="#c0392b", alpha=0.45, label="Avoid (chatter risk)")
     optimal_patch = mpatches.Patch(color="#27ae60", alpha=0.35, label="Optimal")
-    legend_handles = [avoid_patch, optimal_patch, suggested_line, lobe_line]
+    legend_handles = [avoid_patch, optimal_patch, suggested_line]
     if reference_rpm is not None and reference_rpm > 0:
         prac_lo, prac_hi = practical_suggested_range_at_spindle(
             result.suggested_rpm_min, result.suggested_rpm_max, reference_rpm, tolerance=0.10
@@ -2783,6 +2987,12 @@ def main() -> None:
         help="Do not extract tap cycle or subtract background (analyze full recording as-is)",
     )
     parser.add_argument(
+        "--live-spindle",
+        action="store_true",
+        dest="live_spindle",
+        help="Data is from live spindle (continuous) rather than tap test; time signal shows magnitude/axes without decay/Tn; full recording analyzed.",
+    )
+    parser.add_argument(
         "--chip-load",
         type=float,
         default=None,
@@ -2848,7 +3058,7 @@ def main() -> None:
     parser.add_argument(
         "--plot-time-signal",
         action="store_true",
-        help="Generate time-signal map (magnitude + x/y/z vs time, decay envelope, Tn markers)",
+        help="Generate time-signal map (magnitude + x/y/z vs time; tap test: decay envelope, Tn; use --live-spindle for spindle data)",
     )
     parser.add_argument(
         "--plot-time-signal-out",
@@ -2913,7 +3123,7 @@ def main() -> None:
     parser.add_argument(
         "--plot-all",
         action="store_true",
-        help="Generate all example-style outputs: RPM chart, spectrum, optimal-loads (feed table), milling dynamics, resonance map, time signal",
+        help="Generate all visuals: time signal, spectrum, FRF (if force), RPM chart, optimal-loads, feeds & speeds by stepover, resonance map, milling dynamics. Saves each to <stem>_<name>.png.",
     )
     parser.add_argument(
         "--workflow",
@@ -3147,17 +3357,19 @@ def main() -> None:
         _spindle_hz = _get_config().spindle_operating_frequency_hz
 
     tap_series_list: list[tuple[np.ndarray, np.ndarray]] | None = None
+    _full_recording_used = False  # True when homing/live: full recording analyzed (no tap-cycle subset)
 
     # Single argument that is a directory → cycle run: discover tap_*.csv and combined.csv
     if len(csv_list) == 1 and csv_list[0].is_dir():
         cycle_dir = csv_list[0]
         try:
-            combined_path, tap_paths, output_base = discover_cycle_directory(cycle_dir)
+            combined_path, tap_paths, homing_path, output_base = discover_cycle_directory(cycle_dir)
         except ValueError as e:
             parser.error(str(e))
-        if combined_path is None and not tap_paths:
-            parser.error(f"No tap_*.csv or combined.csv found in directory: {cycle_dir}")
+        if combined_path is None and not tap_paths and homing_path is None:
+            parser.error(f"No tap_*.csv, combined.csv, or homing.csv found in directory: {cycle_dir}")
         if combined_path is not None:
+            _no_tap_cycle = getattr(args, "no_subtract_background", False) or getattr(args, "live_spindle", False)
             r = analyze_tap(
                 combined_path,
                 flute_count=args.flute_count,
@@ -3165,13 +3377,13 @@ def main() -> None:
                 max_rpm=args.max_rpm,
                 tool_diameter_mm=args.tool_diameter_mm,
                 tool_material=getattr(args, "tool_material", None),
-                subtract_background=False if getattr(args, "no_subtract_background", False) else None,
+                subtract_background=False if _no_tap_cycle else None,
                 spindle_operating_frequency_hz=_spindle_hz,
             )
             t_loaded, data_loaded, sr_loaded = load_tap_csv(combined_path)
             if tap_paths:
                 tap_series_list = [(load_tap_csv(p)[0], load_tap_csv(p)[1]) for p in tap_paths]
-        else:
+        elif tap_paths:
             t_combined, data_combined, sr_combined = combine_tap_csvs(tap_paths)
             r = analyze_tap_data(
                 t_combined, data_combined, sr_combined,
@@ -3184,9 +3396,38 @@ def main() -> None:
             )
             t_loaded, data_loaded, sr_loaded = t_combined, data_combined, sr_combined
             tap_series_list = [(load_tap_csv(p)[0], load_tap_csv(p)[1]) for p in tap_paths]
+        else:
+            # homing_path is the only CSV (e.g. homing calibration run): always use full
+            # recording so live data is not analyzed as a small tap-cycle subsection.
+            _no_tap_cycle = True
+            _full_recording_used = True
+            r = analyze_tap(
+                homing_path,
+                flute_count=args.flute_count,
+                use_axis=args.axis,
+                max_rpm=args.max_rpm,
+                tool_diameter_mm=args.tool_diameter_mm,
+                tool_material=getattr(args, "tool_material", None),
+                subtract_background=False if _no_tap_cycle else None,
+                spindle_operating_frequency_hz=_spindle_hz,
+            )
+            t_loaded, data_loaded, sr_loaded = load_tap_csv(homing_path)
         csv_path_for_outputs = output_base
-        csv_file_for_loading = combined_path if combined_path is not None else (tap_paths[0] if tap_paths else output_base)
+        csv_file_for_loading = (
+            combined_path if combined_path is not None
+            else (tap_paths[0] if tap_paths else homing_path if homing_path is not None else output_base)
+        )
     elif len(csv_list) == 1:
+        # Single file: use full recording for homing.csv (live spindle) so we don't
+        # analyze only a small tap-cycle subsection; otherwise respect flags/config.
+        _is_homing_file = csv_list[0].name == "homing.csv"
+        _no_tap_cycle = (
+            getattr(args, "no_subtract_background", False)
+            or getattr(args, "live_spindle", False)
+            or _is_homing_file
+        )
+        if _is_homing_file:
+            _full_recording_used = True
         r = analyze_tap(
             csv_list[0],
             flute_count=args.flute_count,
@@ -3194,7 +3435,7 @@ def main() -> None:
             max_rpm=args.max_rpm,
             tool_diameter_mm=args.tool_diameter_mm,
             tool_material=getattr(args, "tool_material", None),
-            subtract_background=False if getattr(args, "no_subtract_background", False) else None,
+            subtract_background=False if _no_tap_cycle else None,
             spindle_operating_frequency_hz=_spindle_hz,
         )
         t_loaded, data_loaded, sr_loaded = load_tap_csv(csv_list[0])
@@ -3217,6 +3458,8 @@ def main() -> None:
         csv_file_for_loading = csv_list[0]
 
     # csv_path_for_outputs: base for output filenames (.parent / f"{.stem}_..."); csv_file_for_loading: actual CSV for FRF/fallback load
+    if getattr(args, "live_spindle", False) or _full_recording_used:
+        print("Data source: live spindle (full recording analyzed; time signal without decay/Tn)")
     unc_str = f" ± {r.natural_freq_hz_uncertainty:.2f}" if r.natural_freq_hz_uncertainty else ""
     print(f"Natural frequency (dominant): {r.natural_freq_hz:.1f}{unc_str} Hz")
     tool_mat_label = _result_tool_material_label(r)
@@ -3227,6 +3470,10 @@ def main() -> None:
     print(tool_desc)
     print(f"Avoid spindle RPM (tooth-pass resonance): {r.avoid_rpm}")
     print(f"Suggested stable RPM range: {r.suggested_rpm_min:.0f} – {r.suggested_rpm_max:.0f} RPM")
+
+    # M593 input shaping (RRF): reduce ringing at tap-test natural frequency
+    m593_line = format_m593_input_shaping(r.natural_freq_hz, damping_ratio=None)
+    print(f"RRF input shaping (config.g): {m593_line}")
 
     # Feed rates: use --chip-load if set, else default 0.05 mm/tooth for guidance
     chip_load_mm = args.chip_load if args.chip_load is not None else 0.05
@@ -3396,8 +3643,9 @@ def main() -> None:
             if sr_loaded <= 0 and len(t_loaded) > 1:
                 sr_loaded = 1.0 / float(np.median(np.diff(t_loaded)))
         out_path = getattr(args, "plot_time_signal_out", None) or (csv_path_for_outputs.parent / f"{csv_path_for_outputs.stem}_time_signal.png")
-        plot_time_signal_figure(r, t_loaded, data_loaded, sr_loaded, output_path=out_path, tap_series_list=tap_series_list)
-        print(f"Time signal map saved to {out_path} (view anytime)")
+        live_spindle = getattr(args, "live_spindle", False)
+        plot_time_signal_figure(r, t_loaded, data_loaded, sr_loaded, output_path=out_path, tap_series_list=tap_series_list, live_spindle=live_spindle)
+        print(f"Time signal map saved to {out_path} (view anytime)" + (" [live spindle]" if live_spindle else ""))
         if getattr(args, "plot_time_signal", False):
             import matplotlib.pyplot as plt
             plt.show()
@@ -3495,9 +3743,13 @@ def main() -> None:
     chart_path = args.plot_out
     if save_chart and chart_path is None:
         chart_path = csv_path_for_outputs.parent / f"{csv_path_for_outputs.stem}_rpm_chart.png"
+    # With --plot-all/--workflow, always set RPM chart path so it is saved even with --no-save-chart
+    if (getattr(args, "plot_all", False) or getattr(args, "workflow", False)) and chart_path is None:
+        chart_path = csv_path_for_outputs.parent / f"{csv_path_for_outputs.stem}_rpm_chart.png"
     ref_rpm = getattr(args, "reference_rpm", None)
     ref_chip = getattr(args, "reference_chip_load", None) or (chip_load_mm if ref_rpm else None)
-    if save_chart and chart_path is not None:
+    save_rpm_chart = (save_chart or getattr(args, "plot_all", False) or getattr(args, "workflow", False)) and chart_path is not None
+    if save_rpm_chart:
         plot_result_figure(r, output_path=chart_path, material_name=args.material, reference_rpm=ref_rpm, reference_chip_load=ref_chip)
         print(f"Chart saved to {chart_path} (view anytime)")
     # Also save optimal-loads chart (RPM + feed table) by default so feed rates are visualized
@@ -3584,15 +3836,37 @@ def main() -> None:
     # 5. Resonance map (RPM vs depth, helix, radial immersion table)
     if getattr(args, "plot_resonance_map", False) or getattr(args, "plot_resonance_map_out", None) is not None:
         out_path = getattr(args, "plot_resonance_map_out", None) or (csv_path_for_outputs.parent / f"{csv_path_for_outputs.stem}_resonance_map.png")
+        helix_deg = getattr(args, "helix", None)
         plot_resonance_map_figure(
             r,
             output_path=out_path,
             max_axial_depth_mm=getattr(args, "max_axial_depth_mm", 25.0),
-            helix_angle_deg=getattr(args, "helix", None),
+            helix_angle_deg=helix_deg,
             figsize=(10, 5),
             material_name=args.material,
         )
         print(f"Resonance map saved to {out_path} (view anytime)")
+        # Per-tooth engagement % vs lobe index at depth (when helix set)
+        if helix_deg is not None and helix_deg > 0:
+            from tap_testing.milling_dynamics import constant_force_axial_depth_mm
+            diam = r.tool_diameter_mm or 10.0
+            tooth_pitch = 360.0 / r.n_teeth_used if r.n_teeth_used else 0
+            depth_at_helix = constant_force_axial_depth_mm(diam, tooth_pitch, helix_deg)
+            eng_path = csv_path_for_outputs.parent / f"{csv_path_for_outputs.stem}_engagement_vs_lobe.png"
+            set_rpm = getattr(args, "reference_rpm", None)
+            if set_rpm is None and r.spindle_operating_frequency_hz and r.spindle_operating_frequency_hz > 0:
+                from tap_testing.config import rpm_from_spindle_frequency_hz
+                set_rpm = rpm_from_spindle_frequency_hz(r.spindle_operating_frequency_hz)
+            plot_engagement_vs_lobe_figure(
+                r,
+                axial_depth_mm=depth_at_helix,
+                helix_angle_deg=helix_deg,
+                output_path=eng_path,
+                n_lobes=6,
+                reference_rpm=set_rpm,
+                material_name=args.material,
+            )
+            print(f"Engagement vs lobe (at depth {depth_at_helix:.1f} mm, linear RPM scale) saved to {eng_path}")
         if getattr(args, "plot_resonance_map", False):
             import matplotlib.pyplot as plt
             plt.show()
