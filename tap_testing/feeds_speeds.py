@@ -11,6 +11,11 @@ adjust for stepover (chip thinning), and check MRR / power / force if needed.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from tap_testing.material import Material  # noqa: F401
 
 # Default spindle power (W) for overload checks. 1.5 kW is a common small CNC spindle.
 DEFAULT_SPINDLE_POWER_W = 1500.0
@@ -41,11 +46,27 @@ __all__ = [
     "feed_rate_for_chipload_mm_min",
     "MIN_CHIPLOAD_MM_PER_TOOTH",
     "mrr_mm3_per_min",
+    "plot_spindle_force_figure",
+    "plot_spindle_force_sweep_figure",
     "rpm_from_sfm",
     "sfm_from_rpm",
+    "spindle_force_and_torque",
+    "SpindleForceResult",
     "tool_engagement_angle_deg",
     "UNIT_POWER_W_MIN_PER_MM3",
 ]
+
+
+@dataclass
+class SpindleForceResult:
+    """Cutting force and torque at the spindle from RPM, geometry, DoC, and feed."""
+
+    tangential_force_N: float  # Mean Ft (resists rotation)
+    torque_Nm: float
+    power_W: float
+    resultant_force_N: float  # Mean magnitude in X-Y plane (Fx, Fy), N
+    feed_per_tooth_mm: float
+    mrr_mm3_per_min: float
 
 
 def cutting_zone_status(
@@ -306,3 +327,223 @@ def cutting_force_n(torque_nm: float, radius_mm: float) -> float:
     if radius_mm <= 0:
         return 0.0
     return torque_nm / (radius_mm / 1000.0)
+
+
+def spindle_force_and_torque(
+    diameter_mm: float,
+    n_teeth: int,
+    axial_depth_mm: float,
+    rpm: float,
+    *,
+    feed_mm_min: float | None = None,
+    chip_load_mm_per_tooth: float | None = None,
+    width_of_cut_mm: float | None = None,
+    material: str | Material | None = None,
+) -> SpindleForceResult:
+    """
+    Total force and torque on the spindle from RPM, tool geometry, depth of cut, and feed.
+
+    Uses the milling force model (Ft = kt·b·h, Fn = kn·b·h) with material-specific
+    coefficients. Mean tangential force (averaged over the cut) drives torque and power;
+    mean resultant force in the X-Y plane is the reaction load on the spindle.
+
+    Either feed_mm_min or chip_load_mm_per_tooth must be given (chip load is used if both
+    are provided). Material defaults to 6061 aluminum if not specified.
+
+    Assumes slotting (100% radial immersion) for the mean-force formulas; if
+    width_of_cut_mm is less than diameter, force and torque are scaled approximately
+    by (width_of_cut / diameter).
+
+    Args:
+        diameter_mm: Tool diameter (mm).
+        n_teeth: Number of flutes (teeth).
+        axial_depth_mm: Axial depth of cut (mm).
+        rpm: Spindle speed (rpm).
+        feed_mm_min: Feed rate (mm/min). Ignored if chip_load_mm_per_tooth is set.
+        chip_load_mm_per_tooth: Feed per tooth (mm). Used to compute feed = chip_load × n_teeth × RPM.
+        width_of_cut_mm: Radial width of cut (mm). If None or >= diameter, full slotting is assumed.
+        material: Material name (e.g. "6061 aluminum") or Material instance for kt, kn.
+
+    Returns:
+        SpindleForceResult with tangential_force_N, torque_Nm, power_W, resultant_force_N, etc.
+    """
+    from tap_testing.material import cutting_coefficients_kt_kn_N_per_mm2, get_material_or_default
+
+    if isinstance(material, str) or material is None:
+        mat = get_material_or_default(material)
+    else:
+        mat = material  # Material instance
+
+    if n_teeth <= 0 or rpm <= 0 or axial_depth_mm <= 0 or diameter_mm <= 0:
+        return SpindleForceResult(
+            tangential_force_N=0.0,
+            torque_Nm=0.0,
+            power_W=0.0,
+            resultant_force_N=0.0,
+            feed_per_tooth_mm=0.0,
+            mrr_mm3_per_min=0.0,
+        )
+    if chip_load_mm_per_tooth is not None and chip_load_mm_per_tooth > 0:
+        ft = chip_load_mm_per_tooth
+        feed_mm_min_val = feed_rate_for_chipload_mm_min(ft, n_teeth, rpm)
+    elif feed_mm_min is not None and feed_mm_min > 0:
+        feed_mm_min_val = feed_mm_min
+        ft = chipload_from_feed_mm_per_tooth(feed_mm_min_val, n_teeth, rpm)
+    else:
+        return SpindleForceResult(
+            tangential_force_N=0.0,
+            torque_Nm=0.0,
+            power_W=0.0,
+            resultant_force_N=0.0,
+            feed_per_tooth_mm=0.0,
+            mrr_mm3_per_min=0.0,
+        )
+
+    kt, kn = cutting_coefficients_kt_kn_N_per_mm2(mat)
+    b = axial_depth_mm
+    r_mm = diameter_mm / 2.0
+    r_m = r_mm / 1000.0
+
+    # Slotting mean forces (no edge terms): Fx_mean = Nt·b·kn/4·ft, Fy_mean = Nt·b·kt/4·ft.
+    # Mean tangential (torque-producing) per tooth over 0..π: (2/π)·kt·b·ft; total mean Ft = Nt·(2/π)·kt·b·ft.
+    ft_mean_slotting = n_teeth * (2.0 / math.pi) * kt * b * ft
+    fx_mean = n_teeth * b * (kn / 4.0) * ft
+    fy_mean = n_teeth * b * (kt / 4.0) * ft
+    resultant_slotting = math.sqrt(fx_mean * fx_mean + fy_mean * fy_mean)
+
+    # Scale by radial engagement if width < diameter (approximate).
+    w = width_of_cut_mm if width_of_cut_mm is not None else diameter_mm
+    engagement = min(1.0, w / diameter_mm) if diameter_mm > 0 else 1.0
+    ft_mean = ft_mean_slotting * engagement
+    resultant = resultant_slotting * engagement
+
+    torque_Nm = ft_mean * r_m
+    omega_rad_s = 2.0 * math.pi * rpm / 60.0
+    power_W = torque_Nm * omega_rad_s
+    mrr = mrr_mm3_per_min(w, axial_depth_mm, feed_mm_min_val)
+
+    return SpindleForceResult(
+        tangential_force_N=ft_mean,
+        torque_Nm=torque_Nm,
+        power_W=power_W,
+        resultant_force_N=resultant,
+        feed_per_tooth_mm=ft,
+        mrr_mm3_per_min=mrr,
+    )
+
+
+def plot_spindle_force_figure(
+    result: SpindleForceResult,
+    title: str | None = None,
+    output_path: str | None = None,
+    figsize: tuple[float, float] = (7, 3.5),
+    spindle_power_limit_W: float | None = None,
+) -> "matplotlib.figure.Figure":
+    """
+    Visualize a single spindle force/torque result (bar chart and key numbers).
+
+    Args:
+        result: SpindleForceResult from spindle_force_and_torque.
+        title: Optional figure title (e.g. "Ø6 mm, 4 fl, 5 mm DoC, 18k RPM").
+        output_path: If set, save figure to file.
+        figsize: Figure size (width, height).
+        spindle_power_limit_W: If set, show as horizontal reference on power bar.
+
+    Returns:
+        matplotlib Figure.
+    """
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 4, figsize=figsize)
+    labels = ["Tangential\nforce (N)", "Torque\n(N·m)", "Power\n(W)", "Resultant\nforce (N)"]
+    values = [
+        result.tangential_force_N,
+        result.torque_Nm,
+        result.power_W,
+        result.resultant_force_N,
+    ]
+    colors = ["#3498db", "#9b59b6", "#e67e22", "#27ae60"]
+    for ax, label, val, color in zip(axes, labels, values, colors):
+        ax.bar([0], [val], color=color, width=0.6)
+        ax.set_ylabel(label, fontsize=10)
+        ax.set_xticks([])
+        ax.axhline(y=0, color="gray", linewidth=0.5)
+        if label == "Power\n(W)" and spindle_power_limit_W is not None and spindle_power_limit_W > 0:
+            ax.axhline(y=spindle_power_limit_W, color="#c0392b", linestyle="--", linewidth=1, label="Spindle limit")
+            ax.legend(fontsize=8)
+        ax.set_title(f"{val:.1f}" if val < 1000 else f"{val:.0f}")
+    if title:
+        fig.suptitle(title, fontsize=11, y=1.02)
+    fig.tight_layout()
+    if output_path:
+        fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    return fig
+
+
+def plot_spindle_force_sweep_figure(
+    x_values: list[float],
+    results: list[SpindleForceResult],
+    x_label: str,
+    title: str | None = None,
+    output_path: str | None = None,
+    figsize: tuple[float, float] = (8, 6),
+    spindle_power_limit_W: float | None = None,
+) -> "matplotlib.figure.Figure":
+    """
+    Visualize spindle force/torque/power vs a swept variable (e.g. RPM or depth of cut).
+
+    Args:
+        x_values: Abscissa (e.g. RPM or axial depth mm).
+        results: One SpindleForceResult per x value (same length as x_values).
+        x_label: Axis label (e.g. "RPM" or "Axial depth (mm)").
+        title: Optional figure title.
+        output_path: If set, save figure to file.
+        figsize: Figure size.
+        spindle_power_limit_W: If set, draw on power subplot.
+
+    Returns:
+        matplotlib Figure.
+    """
+    import matplotlib.pyplot as plt
+
+    if len(x_values) != len(results) or len(x_values) == 0:
+        raise ValueError("x_values and results must have the same non-zero length")
+
+    fig, axes = plt.subplots(2, 2, figsize=figsize, sharex=True)
+    ax_ft, ax_torque, ax_power, ax_resultant = axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]
+
+    ft_vals = [r.tangential_force_N for r in results]
+    torque_vals = [r.torque_Nm for r in results]
+    power_vals = [r.power_W for r in results]
+    res_vals = [r.resultant_force_N for r in results]
+
+    ax_ft.plot(x_values, ft_vals, color="#3498db", linewidth=2, marker="o", markersize=4)
+    ax_ft.set_ylabel("Tangential force (N)")
+    ax_ft.grid(True, alpha=0.3)
+
+    ax_torque.plot(x_values, torque_vals, color="#9b59b6", linewidth=2, marker="s", markersize=4)
+    ax_torque.set_ylabel("Torque (N·m)")
+    ax_torque.grid(True, alpha=0.3)
+
+    ax_power.plot(x_values, power_vals, color="#e67e22", linewidth=2, marker="^", markersize=4)
+    if spindle_power_limit_W is not None and spindle_power_limit_W > 0:
+        ax_power.axhline(y=spindle_power_limit_W, color="#c0392b", linestyle="--", linewidth=1, label="Spindle limit")
+        ax_power.legend(fontsize=8)
+    ax_power.set_ylabel("Power (W)")
+    ax_power.grid(True, alpha=0.3)
+
+    ax_resultant.plot(x_values, res_vals, color="#27ae60", linewidth=2, marker="d", markersize=4)
+    ax_resultant.set_ylabel("Resultant force (N)")
+    ax_resultant.set_xlabel(x_label)
+    ax_resultant.grid(True, alpha=0.3)
+
+    for ax in axes[0, :]:
+        ax.set_xlabel("")
+    axes[1, 1].set_xlabel(x_label)
+
+    if title:
+        fig.suptitle(title, fontsize=11, y=1.02)
+    fig.tight_layout()
+    if output_path:
+        fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    return fig

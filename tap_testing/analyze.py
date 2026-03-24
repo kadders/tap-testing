@@ -3268,7 +3268,28 @@ def main() -> None:
         fn = getattr(args, "natural_freq_hz_chatter", None)
         if fn is None or fn <= 0:
             parser.error("--chatter requires --natural-freq HZ (from tap test)")
-        csv_path = Path(args.csv_file)
+        _ch_csv_list = list(args.csv) if args.csv else []
+        if not _ch_csv_list:
+            parser.error("--chatter requires a CSV file or cycle directory (positional csv)")
+        if len(_ch_csv_list) > 1:
+            parser.error("--chatter expects a single file or one directory, not multiple CSV paths")
+        _ch_p = _ch_csv_list[0]
+        if _ch_p.is_dir():
+            try:
+                _ch_combined, _ch_taps, _ch_homing, _ = discover_cycle_directory(_ch_p)
+            except ValueError as e:
+                parser.error(str(e))
+            if _ch_combined is None and not _ch_taps and _ch_homing is None:
+                parser.error(
+                    f"No tap_*.csv, combined.csv, or homing.csv found in directory: {_ch_p}"
+                )
+            csv_path = (
+                _ch_combined
+                if _ch_combined is not None
+                else (_ch_taps[0] if _ch_taps else _ch_homing)
+            )
+        else:
+            csv_path = _ch_p
         if not csv_path.exists():
             parser.error(f"CSV not found: {csv_path}")
         t_ch, data_ch, sr_ch = load_tap_csv(csv_path)

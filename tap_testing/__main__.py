@@ -28,7 +28,7 @@ Recording and analysis
   record_tap           Record a single tap to CSV (output path, duration, sample rate)
   run_cycle            Run 3-tap cycle: record, combine, analyze (optional LED)
   cycle_gui            Same as run_cycle with GUI: live status + RPM chart
-  homing_gui           Record ADXL during machine homing (Z then X/Y) for spindle calibration
+  homing_gui           Record ADXL during homing; optional --modbus; optional --rrf-job-sync (Duet HTTP / rr_model)
   analyze              Analyze CSV: natural frequency, RPM bands, charts (--plot, --workflow)
 
 Diagnostics and inspection
