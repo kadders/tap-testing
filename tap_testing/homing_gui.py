@@ -13,7 +13,9 @@ and shows live register traces. Configure RTU/TCP via env; H100 VFD: ``TAP_MODBU
 
 Optional Duet / RepRapFirmware HTTP job sync: poll rr_model (RRF REST API / OpenAPI) so
 recording starts when a print or simulate job is active and stops when it finishes or
-cancels. Configure with TAP_RRF_BASE, TAP_RRF_POLL_S, TAP_RRF_DISCOVER_HOSTS, TAP_RRF_PASSWORD.
+cancels. Enable with ``--rrf-job-sync`` (or env ``TAP_RRF_*``). CLI overrides:
+``--rrf-base``, ``--rrf-poll-s``, ``--rrf-password``; discovery hosts via
+``TAP_RRF_DISCOVER_HOSTS``.
 
 Run with: python -m tap_testing.homing_gui
 """
