@@ -1,6 +1,6 @@
 """
 ADXL345 accelerometer interface for tap testing.
-Supports I2C (Adafruit driver) and SPI (Klipper-style wiring) on Raspberry Pi.
+Supports I2C (Adafruit driver) and SPI on Raspberry Pi.
 
 Protocol aligned with Klipper klippy/extras/adxl345.py where applicable:
 - read_reg: send [reg | 0x80, 0x00], use second byte (response[1]); some boards use first byte (see use_first_byte_data).
@@ -20,11 +20,14 @@ try:
     import adafruit_adxl34x
     import busio
     import digitalio
-except ImportError as e:
-    raise ImportError(
-        "tap_testing.accelerometer requires adafruit-blinka and adafruit-circuitpython-adxl34x. "
-        "Install with: pip install -r requirements.txt"
-    ) from e
+except (ImportError, NotImplementedError) as e:
+    # On non-Raspberry-Pi platforms (e.g. Windows), `board` can raise NotImplementedError
+    # during import. We still want the rest of the package (analysis-only paths) to import.
+    board = None
+    adafruit_adxl34x = None
+    busio = None
+    digitalio = None
+    _HARDWARE_IMPORT_ERROR = e
 
 # ADXL345 register addresses and protocol (aligned with Klipper klippy/extras/adxl345.py)
 _REG_DEVID = 0x00
@@ -190,22 +193,37 @@ def open_accelerometer(
     address: int = 0x53,
     range_g: int = 4,
     bus: int | None = None,
-    interface: str = "i2c",
+    interface: str = "spi",
     spi_cs_pin: int = 8,
 ) -> adafruit_adxl34x.ADXL345 | _ADXL345SPI:
     """
-    Open ADXL345 over I2C or SPI (Klipper-style wiring; see docs/ADXL345_WIRING.md).
+    Open ADXL345 over I2C or SPI (see docs/ADXL345_WIRING.md for pinout).
 
     Args:
         address: I2C address (0x53 or 0x1D). Ignored when interface=="spi".
         range_g: Full-scale range in g (2, 4, or 8).
         bus: I2C bus number when interface=="i2c" (e.g. 1, 20, 21).
-        interface: "i2c" or "spi". SPI recommended on RPi (Klipper).
+        interface: "i2c" or "spi". I2C is the standard/simple option; SPI supports higher rates.
         spi_cs_pin: BCM GPIO for SPI CS when interface=="spi" (default 8 = CE0).
 
     Returns:
         Accelerometer instance with .acceleration and .range (same interface for I2C/SPI).
     """
+    if interface == "i2c":
+        if board is None or adafruit_adxl34x is None:
+            raise ImportError(
+                "tap_testing.accelerometer requires adafruit-blinka + adafruit-circuitpython-adxl34x "
+                "and must run on a supported Raspberry Pi platform (board import failed on this system)."
+            ) from _HARDWARE_IMPORT_ERROR
+
+    if interface == "spi" and spi_cs_pin != 8:
+        # Non-kernel-managed CS needs `board` + `digitalio` to control the CS GPIO.
+        if board is None or digitalio is None:
+            raise ImportError(
+                "tap_testing.accelerometer SPI mode (non-CE0 CS) requires adafruit-blinka board support "
+                "(digitalio GPIO control)."
+            ) from _HARDWARE_IMPORT_ERROR
+
     if interface == "spi":
         cs = None
         # Prefer spidev with mode 3 when using kernel CS (spi_cs_pin 8 = CE0). Config can set spi_bus/spi_device.

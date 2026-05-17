@@ -1,10 +1,14 @@
 # ADXL345 wiring and interface (Raspberry Pi)
 
-This project supports the ADXL345 over **I2C** or **SPI** on Raspberry Pi. The same pinout and wiring used by [Klipper’s resonance measurement guide](https://www.klipper3d.org/Measuring_Resonances.html#adxl345) can be used here.
+This project supports the ADXL345 over **I2C** or **SPI** on Raspberry Pi.
+
+For most tap testing setups, use **I2C** with the standard Raspberry Pi pins (GPIO2=SDA1, GPIO3=SCL1).
+
+SPI is optional if you need higher sampling-rate headroom.
 
 ## Why SPI vs I2C
 
-From Klipper’s docs:
+General SPI guidance (including Klipper):
 
 > You need to connect ADXL345 to your Raspberry Pi via **SPI**. Note that the **I2C connection, which is suggested by ADXL345 documentation, has too low throughput and will not work** [for high-rate resonance testing].
 
@@ -14,9 +18,9 @@ For **tap testing** at typical rates (e.g. 800–1600 Hz), **I2C can work** when
 
 ---
 
-## SPI wiring (recommended by Klipper)
+## SPI wiring (standard Raspberry Pi SPI pins)
 
-Use **SPI** and the same pins as Klipper so you can reuse the same cable and layout.
+Use SPI with the standard Raspberry Pi 40-pin header mapping.
 
 | ADXL345 pin | RPi pin | RPi pin name           |
 |-------------|---------|------------------------|
