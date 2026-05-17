@@ -8,6 +8,7 @@ Tap testing application for measuring tool vibrations using an accelerometer mou
 - **Excitation**: **Impulse** by default (hammer tap); excites many frequencies at once
 - **Use case**: Mount accelerometer on tool, tap with hammer, capture and store vibration data
 - **Stack**: Python 3, I2C (or SPI) to the ADXL345
+- Default accelerometer interface is **I2C** (standard Raspberry Pi pins). Use **SPI** only if you need higher-rate sampling.
 
 ## Hardware
 
@@ -15,7 +16,7 @@ Tap testing application for measuring tool vibrations using an accelerometer mou
 - **ADXL345** (±2g / ±4g / ±8g, I2C or SPI)
 
 ![ADXL345 tool mounts](images/adxl345-tool-mounts.png)
-- Wiring (I2C example):
+- Wiring (I2C example; default):
   - ADXL345 `VCC` → 3.3 V
   - ADXL345 `GND` → GND
   - ADXL345 `SDA` → Pi GPIO 2 (SDA)

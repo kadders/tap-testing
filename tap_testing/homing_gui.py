@@ -172,6 +172,7 @@ def run_homing_gui(
     *,
     modbus: bool = False,
     modbus_config: ModbusLoggingConfig | None = None,
+    adxl345_interface: str | None = None,
     rrf_job_sync: bool = False,
     rrf_base_url: str | None = None,
     rrf_poll_interval_s: float | None = None,
@@ -184,6 +185,12 @@ def run_homing_gui(
     If rrf_job_sync is True, the GUI enables Duet HTTP polling to start/stop recording with print jobs.
     """
     cfg = get_config()
+    # Default to SPI for the homing GUI (Klipper-like wiring/throughput),
+    # unless overridden via CLI or TAP_ADXL345_INTERFACE.
+    if adxl345_interface is not None:
+        cfg.adxl345_interface = adxl345_interface
+    elif "TAP_ADXL345_INTERFACE" not in os.environ:
+        cfg.adxl345_interface = "spi"
     mb_cfg: ModbusLoggingConfig | None = None
     if modbus:
         mb_cfg = modbus_config if modbus_config is not None else modbus_logging_config_from_env()
@@ -890,6 +897,15 @@ def main() -> None:
     )
     parser.add_argument("-r", "--rate", type=float, default=None, help="Sample rate (Hz)")
     parser.add_argument(
+        "--adxl-interface",
+        choices=("i2c", "spi"),
+        default=None,
+        help=(
+            "ADXL345 bus interface for accelerometer streaming. "
+            "Default: SPI for the homing GUI unless TAP_ADXL345_INTERFACE is set."
+        ),
+    )
+    parser.add_argument(
         "--modbus",
         action="store_true",
         help="Poll Modbus during recording (pymodbus); saves modbus.csv and shows live register plots. Default transport is RTU; use TAP_MODBUS_* and optional --modbus-profile h100 (docs/MODBUS_H100_VFD.md).",
@@ -993,6 +1009,7 @@ def main() -> None:
         sample_rate_hz=args.rate or cfg.sample_rate_hz,
         modbus=args.modbus,
         modbus_config=mb_cfg if args.modbus else None,
+        adxl345_interface=args.adxl_interface,
         rrf_job_sync=args.rrf_job_sync,
         rrf_base_url=args.rrf_base,
         rrf_poll_interval_s=args.rrf_poll_s,
