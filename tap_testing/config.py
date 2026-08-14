@@ -18,7 +18,8 @@ class TapTestConfig:
     # Force excitation: "impulse" (hammer tap), "sine_sweep", "random" (future).
     excitation_type: str = DEFAULT_EXCITATION_TYPE
 
-    # Interface: "i2c" or "spi". Default SPI (Klipper-style); see docs/ADXL345_WIRING.md.
+    # Interface: "i2c" or "spi". Default SPI (higher throughput); see docs/ADXL345_WIRING.md.
+    # Override with TAP_ADXL345_INTERFACE=i2c for the simpler SDA/SCL wiring.
     adxl345_interface: str = "spi"
     # I2C (when adxl345_interface == "i2c")
     i2c_bus: int = 1

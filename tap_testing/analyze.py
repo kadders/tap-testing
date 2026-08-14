@@ -3492,6 +3492,17 @@ def main() -> None:
     print(f"Avoid spindle RPM (tooth-pass resonance): {r.avoid_rpm}")
     print(f"Suggested stable RPM range: {r.suggested_rpm_min:.0f} – {r.suggested_rpm_max:.0f} RPM")
 
+    # Optional MQTT analysis publish (TAP_MQTT_HOST)
+    try:
+        from tap_testing.mqtt_telemetry import analysis_payload_from_result, try_create_publisher
+        _mqtt = try_create_publisher()
+        if _mqtt is not None:
+            _sid = str(csv_path_for_outputs.stem)
+            _mqtt.publish_analysis(analysis_payload_from_result(r, _sid, source="pi"))
+            _mqtt.close()
+    except Exception:
+        pass
+
     # M593 input shaping (RRF): reduce ringing at tap-test natural frequency
     m593_line = format_m593_input_shaping(r.natural_freq_hz, damping_ratio=None)
     print(f"RRF input shaping (config.g): {m593_line}")

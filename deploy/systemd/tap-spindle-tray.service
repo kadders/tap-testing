@@ -1,0 +1,17 @@
+[Unit]
+Description=Milo tap-spindle tray indicator (optional GUI)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/repos/tap-testing
+EnvironmentFile=-/etc/default/tap-spindle
+Environment=TAP_LIVE_TRAY=1
+# Tray-only process that also runs the service loop when DISPLAY is set.
+# Prefer the system service for capture; use this only on a desktop session.
+ExecStart=/home/kad/.venvs/tap-testing/bin/python -m tap_testing.live_spindle_service --idle --tray
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

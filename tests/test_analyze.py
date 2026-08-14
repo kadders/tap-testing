@@ -13,6 +13,7 @@ from tap_testing.analyze import (
     ToolingConfiguration,
     analyze_tap,
     analyze_tap_data,
+    chart_rpm_range,
     compute_sdof_interpretation,
     dominant_frequency,
     feed_rate_mm_min,
@@ -440,8 +441,9 @@ class TestPlotResultFigure:
         assert len(fig.axes) == 1
         ax = fig.axes[0]
         xlim = ax.get_xlim()
-        assert xlim[0] == result.min_rpm
-        assert xlim[1] == result.max_rpm
+        rpm_lo, rpm_hi = chart_rpm_range(result)
+        assert xlim[0] == rpm_lo
+        assert xlim[1] == rpm_hi
         assert ax.get_xlabel() == "Spindle speed (rpm)"
         assert out.exists()
         assert out.stat().st_size > 500  # PNG has non-trivial content

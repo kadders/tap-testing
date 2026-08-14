@@ -1,0 +1,29 @@
+# /etc/default/tap-spindle — environment for tap-spindle.service
+
+# RRF / DSF on this SBC (prefer loopback)
+TAP_RRF_BASE=http://127.0.0.1
+# TAP_RRF_PASSWORD=
+TAP_RRF_POLL_S=1.0
+
+# MQTT → Jarvis Mosquitto over cluster LAN DNS.
+# Host only: do not include mqtt:// or a port in this value.
+TAP_MQTT_HOST=mqtt.jarvis.lan
+TAP_MQTT_PORT=1883
+TAP_MQTT_DEVICE_ID=milo-sbc
+TAP_MQTT_REQUIRE_SBC=1
+# TAP_MQTT_FORCE=1
+
+# Recording mode: job sync (default) or always-on
+TAP_LIVE_JOB_SYNC=1
+# TAP_LIVE_ALWAYS_ON=1
+
+TAP_LIVE_STATUS_PATH=/run/tap-spindle/status.json
+TAP_LOG_LEVEL=INFO
+
+# ADXL345 interface (default SPI — Mode 3, CE0 / GPIO 8)
+# Pinout: CS→GPIO8, MISO→GPIO9, MOSI→GPIO10, SCLK→GPIO11
+TAP_ADXL345_INTERFACE=spi
+TAP_SPI_BUS=0
+TAP_SPI_DEVICE=0
+# TAP_SPI_FIRST_BYTE_DATA=1
+# For I2C instead: TAP_ADXL345_INTERFACE=i2c  (SDA GPIO2 / SCL GPIO3)

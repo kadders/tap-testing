@@ -249,7 +249,9 @@ def sfm_from_rpm(rpm: float, diameter_mm: float) -> float:
 
 def rpm_from_sfm(sfm_ft_per_min: float, diameter_mm: float) -> float:
     """
-    RPM to achieve a given surface speed (SFM): RPM = SFM / (0.262 × D_in).
+    RPM to achieve a given surface speed (SFM).
+
+    Exact inverse of :func:`sfm_from_rpm`: RPM = SFM × 12 / (π × D_in).
 
     Args:
         sfm_ft_per_min: Surface feet per minute (cutting speed at periphery).
@@ -261,7 +263,7 @@ def rpm_from_sfm(sfm_ft_per_min: float, diameter_mm: float) -> float:
     if sfm_ft_per_min <= 0 or diameter_mm <= 0:
         return 0.0
     diameter_in = diameter_mm / 25.4
-    return sfm_ft_per_min / (0.262 * diameter_in)
+    return sfm_ft_per_min * 12.0 / (math.pi * diameter_in)
 
 
 def cutting_power_w(

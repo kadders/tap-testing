@@ -63,12 +63,14 @@ from .modbus_logging import (
     modbus_logging_config_from_env,
     run_modbus_poll_loop,
 )
+from .mqtt_telemetry import try_create_publisher
 from .record_tap import record_stream
 from .rrf_http import (
     RrfClient,
     RrfHttpError,
     discover_rrf_base,
     infer_print_job_active,
+    parse_job_file_name,
     probe_rrf_base,
     rrf_default_base_url,
     rrf_default_poll_interval_s,
@@ -129,6 +131,8 @@ def _run_recording_worker(
     on_done: Callable[[], None] | None,
     accel: object | None = None,
     on_plot_point: Callable[[float, float], None] | None = None,
+    mqtt=None,
+    recording_t0_mono: float | None = None,
 ) -> None:
     """Run record_stream in a background thread; update GUI via root.after()."""
     def status(msg: str) -> None:
@@ -156,6 +160,10 @@ def _run_recording_worker(
             sample_callback=sample_callback,
             callback_interval_s=0.05,
             accel=accel,
+            mqtt=mqtt,
+            mqtt_mode="homing",
+            mqtt_manage_session=False,
+            recording_t0_mono=recording_t0_mono,
         )
         status(f"Recording stopped. Saved to: {output_path}")
     except Exception as e:
@@ -163,6 +171,12 @@ def _run_recording_worker(
         friendly = _friendly_accel_error(str(e)) or f"Error: {e}"
         root.after(0, lambda msg=friendly: status_var.set(msg))
     finally:
+        if mqtt is not None:
+            try:
+                mqtt.session_stop()
+                mqtt.close()
+            except Exception:
+                pass
         done()
 
 
@@ -527,6 +541,24 @@ def run_homing_gui(
         live_var.set("Live: streaming…")
 
         stop_event = threading.Event()
+        # One monotonic origin for ADXL + Modbus (+ tool events when present)
+        recording_t0_mono = time.monotonic()
+        mqtt_pub = try_create_publisher()
+        job_file = None
+        try:
+            _rrf = RrfClient(rrf_default_base_url())
+            _rrf.connect()
+            _st, _job = _rrf.fetch_state_and_job()
+            job_file = parse_job_file_name(_job)
+        except Exception:
+            job_file = None
+        if mqtt_pub is not None:
+            mqtt_pub.session_start(
+                mode="homing",
+                sample_rate_hz=rate,
+                session_id=timestamp,
+                job_file=job_file,
+            )
 
         def on_done() -> None:
             nonlocal recording_active, live_plot_timer_id, clear_plot_timer_id
@@ -554,6 +586,8 @@ def run_homing_gui(
                 on_done,
                 shared_accel,
                 on_plot_point,
+                mqtt_pub,
+                recording_t0_mono,
             ),
             daemon=True,
         )
@@ -563,6 +597,11 @@ def run_homing_gui(
             assert mb_cfg is not None
 
             def on_mb_row(row: dict) -> None:
+                if mqtt_pub is not None:
+                    try:
+                        mqtt_pub.publish_modbus_row(float(row.get("t_s", 0.0)), row)
+                    except Exception:
+                        pass
                 root.after(0, lambda r=dict(row): apply_modbus_row(r))
 
             def on_mb_fail(msg: str) -> None:
@@ -573,6 +612,7 @@ def run_homing_gui(
             modbus_thread = threading.Thread(
                 target=run_modbus_poll_loop,
                 args=(modbus_path, stop_event, mb_cfg, on_mb_row, on_mb_fail),
+                kwargs={"recording_t0_mono": recording_t0_mono},
                 daemon=True,
             )
             modbus_thread.start()

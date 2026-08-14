@@ -14,7 +14,9 @@ import numpy as np
 from .analyze import analyze_tap_data, load_tap_csv, plot_result
 from .config import get_config, rpm_from_spindle_frequency_hz
 from .measurement_uncertainties import natural_freq_uncertainty_from_tap_spread
+from .mqtt_telemetry import analysis_payload_from_result, try_create_publisher
 from .record_tap import record_tap
+from .rrf_http import RrfClient, RrfHttpError, parse_job_file_name, rrf_default_base_url
 
 
 def _led_available(gpio_bcm: int | None) -> bool:
@@ -127,97 +129,120 @@ def run_cycle(
     duration_s = duration_s or cfg.record_duration_s
     sample_rate_hz = sample_rate_hz or cfg.sample_rate_hz
     tap_paths: list[Path] = []
+    mqtt = try_create_publisher()
+    cycle_session_id = run_id
+    job_file: str | None = None
+    try:
+        client = RrfClient(rrf_default_base_url())
+        client.connect()
+        _state, job = client.fetch_state_and_job()
+        job_file = parse_job_file_name(job)
+    except (RrfHttpError, Exception):
+        job_file = None
 
-    for i in range(1, iterations + 1):
-        tap_path = run_dir / f"tap_{i}.csv"
-        print(f"\n--- Tap test {i}/{iterations} ---")
-        if use_led:
-            print("LED ON — TAP the tool now.")
-        else:
-            print("TAP the tool now.")
-        if use_led:
-            _led_on(led_gpio)
-        try:
-
-            def on_tap(t_s: float) -> None:
-                print(f"  Tap detected at t={t_s:.2f} s")
-
-            record_tap(
-                tap_path,
-                duration_s=duration_s,
-                sample_rate_hz=sample_rate_hz,
-                on_tap_detected=on_tap,
-            )
-        finally:
+    try:
+        for i in range(1, iterations + 1):
+            tap_path = run_dir / f"tap_{i}.csv"
+            print(f"\n--- Tap test {i}/{iterations} ---")
             if use_led:
-                _led_off(led_gpio)
-        tap_paths.append(tap_path)
-        print(f"Saved {tap_path.name}")
+                print("LED ON — TAP the tool now.")
+            else:
+                print("TAP the tool now.")
+            if use_led:
+                _led_on(led_gpio)
+            try:
 
-        if i < iterations:
-            print(f"Waiting {spacing_s:.0f} s until next tap...")
-            time.sleep(spacing_s)
+                def on_tap(t_s: float) -> None:
+                    print(f"  Tap detected at t={t_s:.2f} s")
 
-    print("\nCombining data and analyzing...")
-    t_combined, data_combined, sr = _combine_tap_csvs(tap_paths)
-    combined_csv = run_dir / "combined.csv"
-    with combined_csv.open("w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(("t_s", "ax_g", "ay_g", "az_g"))
-        writer.writerow(("# sample_rate_hz", sr, "", ""))
-        for j in range(len(t_combined)):
-            writer.writerow((t_combined[j], data_combined[0, j], data_combined[1, j], data_combined[2, j]))
+                record_tap(
+                    tap_path,
+                    duration_s=duration_s,
+                    sample_rate_hz=sample_rate_hz,
+                    on_tap_detected=on_tap,
+                    mqtt=mqtt,
+                    mqtt_mode="cycle",
+                    mqtt_session_id=f"{cycle_session_id}-tap{i}",
+                    job_file=job_file,
+                )
+            finally:
+                if use_led:
+                    _led_off(led_gpio)
+            tap_paths.append(tap_path)
+            print(f"Saved {tap_path.name}")
 
-    # Per-tap natural frequencies for measurement uncertainty (tap-to-tap spread)
-    tap_freqs_hz: list[float] = []
-    for p in tap_paths:
-        t_tap, data_tap, sr_tap = load_tap_csv(p)
-        if sr_tap <= 0 and len(t_tap) > 1:
-            sr_tap = 1.0 / float(np.median(np.diff(t_tap)))
-        if sr_tap > 0 and data_tap.size >= 6:
-            r_tap = analyze_tap_data(
-                t_tap, data_tap, sr_tap,
-                flute_count=flute_count,
-                max_rpm=max_rpm,
-                tool_diameter_mm=tool_diameter_mm,
-                tool_material=tool_material,
+            if i < iterations:
+                print(f"Waiting {spacing_s:.0f} s until next tap...")
+                time.sleep(spacing_s)
+
+        print("\nCombining data and analyzing...")
+        t_combined, data_combined, sr = _combine_tap_csvs(tap_paths)
+        combined_csv = run_dir / "combined.csv"
+        with combined_csv.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(("t_s", "ax_g", "ay_g", "az_g"))
+            writer.writerow(("# sample_rate_hz", sr, "", ""))
+            for j in range(len(t_combined)):
+                writer.writerow((t_combined[j], data_combined[0, j], data_combined[1, j], data_combined[2, j]))
+
+        # Per-tap natural frequencies for measurement uncertainty (tap-to-tap spread)
+        tap_freqs_hz: list[float] = []
+        for p in tap_paths:
+            t_tap, data_tap, sr_tap = load_tap_csv(p)
+            if sr_tap <= 0 and len(t_tap) > 1:
+                sr_tap = 1.0 / float(np.median(np.diff(t_tap)))
+            if sr_tap > 0 and data_tap.size >= 6:
+                r_tap = analyze_tap_data(
+                    t_tap, data_tap, sr_tap,
+                    flute_count=flute_count,
+                    max_rpm=max_rpm,
+                    tool_diameter_mm=tool_diameter_mm,
+                    tool_material=tool_material,
+                )
+                tap_freqs_hz.append(r_tap.natural_freq_hz)
+        tap_spread_std_hz = natural_freq_uncertainty_from_tap_spread(tap_freqs_hz) if len(tap_freqs_hz) >= 2 else None
+
+        if spindle_operating_frequency_hz is None:
+            spindle_operating_frequency_hz = get_config().spindle_operating_frequency_hz
+        result = analyze_tap_data(
+            t_combined, data_combined, sr,
+            flute_count=flute_count,
+            max_rpm=max_rpm,
+            tool_diameter_mm=tool_diameter_mm,
+            tool_material=tool_material,
+            tap_spread_std_hz=tap_spread_std_hz,
+            spindle_operating_frequency_hz=spindle_operating_frequency_hz,
+        )
+
+        if mqtt is not None:
+            mqtt.publish_analysis(
+                analysis_payload_from_result(result, cycle_session_id, source="pi")
             )
-            tap_freqs_hz.append(r_tap.natural_freq_hz)
-    tap_spread_std_hz = natural_freq_uncertainty_from_tap_spread(tap_freqs_hz) if len(tap_freqs_hz) >= 2 else None
 
-    if spindle_operating_frequency_hz is None:
-        spindle_operating_frequency_hz = get_config().spindle_operating_frequency_hz
-    result = analyze_tap_data(
-        t_combined, data_combined, sr,
-        flute_count=flute_count,
-        max_rpm=max_rpm,
-        tool_diameter_mm=tool_diameter_mm,
-        tool_material=tool_material,
-        tap_spread_std_hz=tap_spread_std_hz,
-        spindle_operating_frequency_hz=spindle_operating_frequency_hz,
-    )
+        unc_str = f" ± {result.natural_freq_hz_uncertainty:.2f}" if result.natural_freq_hz_uncertainty else ""
+        print(f"\nNatural frequency: {result.natural_freq_hz:.1f}{unc_str} Hz")
+        print(f"Avoid RPM: {result.avoid_rpm}")
+        print(f"Suggested RPM range: {result.suggested_rpm_min:.0f} – {result.suggested_rpm_max:.0f}")
 
-    unc_str = f" ± {result.natural_freq_hz_uncertainty:.2f}" if result.natural_freq_hz_uncertainty else ""
-    print(f"\nNatural frequency: {result.natural_freq_hz:.1f}{unc_str} Hz")
-    print(f"Avoid RPM: {result.avoid_rpm}")
-    print(f"Suggested RPM range: {result.suggested_rpm_min:.0f} – {result.suggested_rpm_max:.0f}")
+        # Save and optionally show chart (RPM bands + 3 tap traces + average)
+        chart_path = plot_out if plot_out is not None else run_dir / "rpm_chart.png"
+        from .analyze import load_tap_csv as load_csv, plot_cycle_result_figure
+        tap_series_list = [(load_csv(p)[0], load_csv(p)[1]) for p in tap_paths]
+        reference_rpm = rpm_from_spindle_frequency_hz(spindle_operating_frequency_hz) if spindle_operating_frequency_hz > 0 else None
+        fig = plot_cycle_result_figure(
+            result, tap_series_list, output_path=chart_path, material_name=material_name,
+            reference_rpm=reference_rpm, reference_chip_load=0.05,
+        )
+        print(f"Chart saved to {chart_path} (view anytime)")
+        if plot:
+            import matplotlib.pyplot as plt
+            plt.show()
+            plt.close(fig)
 
-    # Save and optionally show chart (RPM bands + 3 tap traces + average)
-    chart_path = plot_out if plot_out is not None else run_dir / "rpm_chart.png"
-    from .analyze import load_tap_csv as load_csv, plot_cycle_result_figure
-    tap_series_list = [(load_csv(p)[0], load_csv(p)[1]) for p in tap_paths]
-    reference_rpm = rpm_from_spindle_frequency_hz(spindle_operating_frequency_hz) if spindle_operating_frequency_hz > 0 else None
-    fig = plot_cycle_result_figure(
-        result, tap_series_list, output_path=chart_path, material_name=material_name,
-        reference_rpm=reference_rpm, reference_chip_load=0.05,
-    )
-    print(f"Chart saved to {chart_path} (view anytime)")
-    if plot:
-        import matplotlib.pyplot as plt
-        plt.show()
-        plt.close(fig)
-
-    return tap_paths, combined_csv
+        return tap_paths, combined_csv
+    finally:
+        if mqtt is not None:
+            mqtt.close()
 
 
 def main() -> None:

@@ -8,6 +8,7 @@ homing calibration or tool cycle) without tap detection or fixed duration.
 from __future__ import annotations
 
 import csv
+import os
 import threading
 import time
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Callable
 
 from .accelerometer import open_accelerometer, stream_samples
 from .config import get_config
+from .mqtt_telemetry import MqttTelemetryPublisher, try_create_publisher
 
 # CSV columns are ax_g, ay_g, az_g (g). Driver returns m/s²; 1 g = 9.80665 m/s².
 _MPS2_TO_G = 1.0 / 9.80665
@@ -33,6 +35,12 @@ def record_tap(
     callback_interval_s: float = 0.05,
     on_tap_detected: Callable[[float], None] | None = None,
     impact_threshold_g: float | None = None,
+    mqtt: MqttTelemetryPublisher | None = None,
+    mqtt_mode: str = "tap",
+    mqtt_session_id: str | None = None,
+    mqtt_manage_session: bool = True,
+    job_file: str | None = None,
+    mqtt_extra: dict | None = None,
 ) -> Path:
     """
     Record accelerometer data for a fixed duration and write CSV.
@@ -47,6 +55,12 @@ def record_tap(
         callback_interval_s: Minimum time between sample_callback calls (default 0.05 s).
         on_tap_detected: If set, called once with t_s when impact is detected (magnitude above baseline + threshold).
         impact_threshold_g: Magnitude (g) above baseline to consider a tap; default from config.
+        mqtt: Optional MQTT publisher; if None, created from TAP_MQTT_* env when set.
+        mqtt_mode: Session mode label for MQTT (`tap`, `cycle`, etc.).
+        mqtt_session_id: Optional fixed session id (e.g. shared across a cycle).
+        mqtt_manage_session: If True, start/stop MQTT session around this recording.
+        job_file: Optional G-code path for start/stop session enrichment.
+        mqtt_extra: Optional extra fields on start_session (e.g. gcode_sha256).
 
     Returns:
         Path to the written file.
@@ -73,34 +87,57 @@ def record_tap(
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    owns_mqtt = mqtt is None
+    if mqtt is None:
+        mqtt = try_create_publisher()
+    if mqtt is not None and mqtt_manage_session:
+        mqtt.session_start(
+            mode=mqtt_mode,
+            sample_rate_hz=sample_rate_hz,
+            session_id=mqtt_session_id,
+            job_file=job_file,
+            extra=mqtt_extra,
+        )
+
     last_callback_t = 0.0
     baseline_mag = 0.0
     mag_buffer: list[float] = []
     tap_reported = False
 
-    with path.open("w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(("t_s", "ax_g", "ay_g", "az_g"))
-        writer.writerow(("# sample_rate_hz", sample_rate_hz, "", ""))
-        for idx, (t, x, y, z) in enumerate(stream_samples(accel, interval_s, stop_after_n=n_samples)):
-            x_g = x * _MPS2_TO_G
-            y_g = y * _MPS2_TO_G
-            z_g = z * _MPS2_TO_G
-            writer.writerow((t, x_g, y_g, z_g))
+    try:
+        with path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(("t_s", "ax_g", "ay_g", "az_g"))
+            writer.writerow(("# sample_rate_hz", sample_rate_hz, "", ""))
+            for idx, (t, x, y, z) in enumerate(stream_samples(accel, interval_s, stop_after_n=n_samples)):
+                x_g = x * _MPS2_TO_G
+                y_g = y * _MPS2_TO_G
+                z_g = z * _MPS2_TO_G
+                writer.writerow((t, x_g, y_g, z_g))
+                if mqtt is not None:
+                    mqtt.emit_sample(t, x_g, y_g, z_g)
 
-            mag = (x_g * x_g + y_g * y_g + z_g * z_g) ** 0.5
-            if idx < n_baseline:
-                mag_buffer.append(mag)
-                if idx == n_baseline - 1 and mag_buffer:
-                    baseline_mag = sum(mag_buffer) / len(mag_buffer)
-            elif not tap_reported and on_tap_detected is not None:
-                if mag >= baseline_mag + threshold_g:
-                    tap_reported = True
-                    on_tap_detected(t)
+                mag = (x_g * x_g + y_g * y_g + z_g * z_g) ** 0.5
+                if idx < n_baseline:
+                    mag_buffer.append(mag)
+                    if idx == n_baseline - 1 and mag_buffer:
+                        baseline_mag = sum(mag_buffer) / len(mag_buffer)
+                elif not tap_reported:
+                    if mag >= baseline_mag + threshold_g:
+                        tap_reported = True
+                        if mqtt is not None:
+                            mqtt.publish_tap_detected(t)
+                        if on_tap_detected is not None:
+                            on_tap_detected(t)
 
-            if sample_callback is not None and (t - last_callback_t) >= callback_interval_s:
-                sample_callback(t, x_g, y_g, z_g)
-                last_callback_t = t
+                if sample_callback is not None and (t - last_callback_t) >= callback_interval_s:
+                    sample_callback(t, x_g, y_g, z_g)
+                    last_callback_t = t
+    finally:
+        if mqtt is not None and mqtt_manage_session:
+            mqtt.session_stop(job_file=job_file)
+            if owns_mqtt:
+                mqtt.close()
 
     return path
 
@@ -112,6 +149,15 @@ def record_stream(
     sample_callback: Callable[[float, float, float, float], None] | None = None,
     callback_interval_s: float = 0.05,
     accel: object | None = None,
+    mqtt: MqttTelemetryPublisher | None = None,
+    mqtt_mode: str = "stream",
+    mqtt_session_id: str | None = None,
+    mqtt_manage_session: bool = True,
+    recording_t0_mono: float | None = None,
+    on_recording_origin: Callable[[float], None] | None = None,
+    job_file: str | None = None,
+    mqtt_extra: dict | None = None,
+    mqtt_idle_timeout_s: float | None = None,
 ) -> Path:
     """
     Record a single continuous stream of ADXL data until stop_event is set.
@@ -128,6 +174,16 @@ def record_stream(
         callback_interval_s: Minimum time between sample_callback calls.
         accel: Optional pre-opened accelerometer instance (e.g. for shared use with live plot).
               If None, opens and uses an internal instance.
+        mqtt: Optional MQTT publisher; if None, created from TAP_MQTT_* env when set.
+        mqtt_mode: Session mode label for MQTT.
+        mqtt_session_id: Optional fixed session id.
+        mqtt_manage_session: If True, start/stop MQTT session around this recording.
+        recording_t0_mono: Optional ``time.monotonic()`` origin shared with tool telemetry.
+        on_recording_origin: Optional callback invoked with the monotonic origin once set.
+        job_file: Optional G-code path for start/stop session enrichment.
+        mqtt_extra: Optional extra fields on start_session (e.g. gcode_sha256).
+        mqtt_idle_timeout_s: If set (or via MQTT_SESSION_IDLE_TIMEOUT_S, default 25),
+            stop the stream when no samples arrive for that many seconds.
 
     Returns:
         Path to the written file.
@@ -135,6 +191,11 @@ def record_stream(
     cfg = get_config()
     sample_rate_hz = sample_rate_hz if sample_rate_hz is not None else cfg.sample_rate_hz
     interval_s = 1.0 / sample_rate_hz
+    if mqtt_idle_timeout_s is None:
+        mqtt_idle_timeout_s = float(
+            os.environ.get("MQTT_SESSION_IDLE_TIMEOUT_S", "25") or "25"
+        )
+    idle_timeout_s = float(mqtt_idle_timeout_s or 0.0)
 
     if accel is None:
         accel = open_accelerometer(
@@ -147,32 +208,93 @@ def record_stream(
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    t0 = time.perf_counter()
+    owns_mqtt = mqtt is None
+    if mqtt is None:
+        mqtt = try_create_publisher()
+    if mqtt is not None and mqtt_manage_session:
+        mqtt.session_start(
+            mode=mqtt_mode,
+            sample_rate_hz=sample_rate_hz,
+            session_id=mqtt_session_id,
+            job_file=job_file,
+            extra=mqtt_extra,
+        )
+
+    # Use monotonic clock so ADXL t_s and tool-event t_s share one origin.
+    t0 = float(recording_t0_mono) if recording_t0_mono is not None else time.monotonic()
+    if on_recording_origin is not None:
+        try:
+            on_recording_origin(t0)
+        except Exception:
+            pass
     last_callback_t = 0.0
     n = 0
+    last_sample_mono = [time.monotonic()]
+    idle_triggered = threading.Event()
 
-    with path.open("w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(("t_s", "ax_g", "ay_g", "az_g"))
-        writer.writerow(("# sample_rate_hz", sample_rate_hz, "", ""))
+    def _idle_watchdog() -> None:
+        if idle_timeout_s <= 0:
+            return
         while not stop_event.is_set():
-            t = time.perf_counter() - t0
-            x, y, z = accel.acceleration
-            x_g = x * _MPS2_TO_G
-            y_g = y * _MPS2_TO_G
-            z_g = z * _MPS2_TO_G
-            writer.writerow((t, x_g, y_g, z_g))
-            n += 1
+            if time.monotonic() - last_sample_mono[0] >= idle_timeout_s:
+                idle_triggered.set()
+                stop_event.set()
+                return
+            if stop_event.wait(timeout=0.5):
+                return
 
-            if sample_callback is not None and (t - last_callback_t) >= callback_interval_s:
-                sample_callback(t, x_g, y_g, z_g)
-                last_callback_t = t
+    watchdog: threading.Thread | None = None
+    if idle_timeout_s > 0:
+        watchdog = threading.Thread(
+            target=_idle_watchdog, name="adxl-idle-watchdog", daemon=True
+        )
+        watchdog.start()
 
-            next_t = t0 + (n + 1) * interval_s
-            sleep_s = next_t - time.perf_counter()
-            if sleep_s > 0:
-                if stop_event.wait(timeout=sleep_s):
-                    break
+    try:
+        with path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(("t_s", "ax_g", "ay_g", "az_g"))
+            writer.writerow(("# sample_rate_hz", sample_rate_hz, "", ""))
+            while not stop_event.is_set():
+                t = time.monotonic() - t0
+                x, y, z = accel.acceleration
+                x_g = x * _MPS2_TO_G
+                y_g = y * _MPS2_TO_G
+                z_g = z * _MPS2_TO_G
+                writer.writerow((t, x_g, y_g, z_g))
+                last_sample_mono[0] = time.monotonic()
+                if mqtt is not None:
+                    mqtt.emit_sample(t, x_g, y_g, z_g)
+                n += 1
+
+                if sample_callback is not None and (t - last_callback_t) >= callback_interval_s:
+                    sample_callback(t, x_g, y_g, z_g)
+                    last_callback_t = t
+
+                next_t = t0 + (n + 1) * interval_s
+                sleep_s = next_t - time.monotonic()
+                if sleep_s > 0:
+                    if stop_event.wait(timeout=sleep_s):
+                        break
+    finally:
+        if idle_triggered.is_set() and mqtt is not None:
+            try:
+                mqtt.publish_status(
+                    "error",
+                    {
+                        "session_id": mqtt_session_id,
+                        "last_error": "idle_timeout",
+                        "idle_timeout_s": idle_timeout_s,
+                    },
+                )
+            except Exception:
+                pass
+        if mqtt is not None and mqtt_manage_session:
+            mqtt.session_stop(job_file=job_file)
+            if owns_mqtt:
+                mqtt.close()
+        if watchdog is not None:
+            watchdog.join(timeout=1.0)
 
     return path
 

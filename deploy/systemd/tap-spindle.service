@@ -1,0 +1,24 @@
+[Unit]
+Description=Milo live-spindle MQTT telemetry (tap-testing)
+Documentation=file:///mnt/repos/tap-testing/docs/LIVE_SPINDLE_SERVICE.md
+After=network-online.target duetcontrolserver.service
+Wants=network-online.target
+# DSF may not exist on non-Duet hosts; do not hard-Require it
+After=duetcontrolserver.service
+
+[Service]
+Type=simple
+User=kad
+Group=kad
+WorkingDirectory=/mnt/repos/tap-testing
+EnvironmentFile=-/etc/default/tap-spindle
+# Prefer a Pi-local venv (NFS .venv often lacks +x / wrong arch). Override via EnvironmentFile.
+Environment=PYTHONPATH=/mnt/repos/tap-testing
+ExecStart=/home/kad/.venvs/tap-testing/bin/python -m tap_testing.live_spindle_service
+Restart=on-failure
+RestartSec=5
+# ADXL / SPI access
+SupplementaryGroups=spi i2c gpio dialout
+
+[Install]
+WantedBy=multi-user.target

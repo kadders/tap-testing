@@ -29,6 +29,8 @@ from tap_testing.rrf_http import (
     RrfClient,
     RrfHttpError,
     infer_print_job_active,
+    is_sbc_mode,
+    normalize_rrf_globals,
     probe_rrf_base,
     rrf_discovery_hosts,
 )
@@ -81,6 +83,89 @@ def test_infer_print_job_active(
     expected: bool,
 ) -> None:
     assert infer_print_job_active(state, job) is expected
+
+
+def test_parse_current_tool_and_job_file() -> None:
+    from tap_testing.rrf_http import (
+        parse_current_tool,
+        parse_job_file_name,
+        parse_job_file_position,
+        summarize_tool,
+    )
+
+    assert parse_current_tool({"currentTool": 4}) == 4
+    assert parse_current_tool({"currentTool": -1}) == -1
+    assert parse_job_file_name({"file": {"fileName": "x.gcode"}}) == "x.gcode"
+    assert parse_job_file_position({"filePosition": 50}) == 50
+    assert summarize_tool({"number": 1, "name": "a", "ignore": True}) == {
+        "number": 1,
+        "name": "a",
+    }
+
+@pytest.mark.parametrize(
+    ("sbc", "expected"),
+    [
+        (None, False),
+        ("", False),
+        ([], False),
+        ({}, False),
+        ({"distribution": "DuetPi"}, True),
+        ({"dsf": {"version": "3.5.0"}}, True),
+    ],
+)
+def test_is_sbc_mode(sbc: object, expected: bool) -> None:
+    assert is_sbc_mode(sbc) is expected
+
+
+def test_rrf_client_fetch_sbc() -> None:
+    client = RrfClient("http://dummy")
+
+    def fake(path: str, query: dict[str, str]) -> dict:
+        if path == "/rr_connect":
+            return {"err": 0}
+        if path == "/rr_model" and query.get("key") == "sbc":
+            return {"key": "sbc", "flags": "v", "result": {"distribution": "DuetPi"}}
+        raise AssertionError(f"unexpected {path} {query}")
+
+    with patch.object(client, "_request_json", side_effect=fake):
+        client.connect()
+        sbc = client.fetch_sbc()
+        assert sbc == {"distribution": "DuetPi"}
+        assert is_sbc_mode(sbc) is True
+
+
+def test_rrf_client_fetch_globals_and_spindles() -> None:
+    client = RrfClient("http://dummy")
+
+    def fake(path: str, query: dict[str, str]) -> dict:
+        if path == "/rr_connect":
+            return {"err": 0}
+        if path == "/rr_model" and query.get("key") == "global":
+            return {
+                "key": "global",
+                "flags": "v",
+                "result": {
+                    "arborctlLdd": True,
+                    "arborVFDStatus": [[True, 1, 400.0, 24000.0, True]],
+                    "h100Fc4Count": [13],
+                },
+            }
+        if path == "/rr_model" and query.get("key") == "spindles":
+            return {
+                "key": "spindles",
+                "flags": "v",
+                "result": [{"state": "forward", "active": 24000, "current": 23980}],
+            }
+        raise AssertionError(f"unexpected {path} {query}")
+
+    with patch.object(client, "_request_json", side_effect=fake):
+        client.connect()
+        g = client.fetch_globals()
+        spindles = client.fetch_spindles()
+    assert g["arborctlLdd"] is True
+    assert g["h100Fc4Count"] == [13]
+    assert spindles[0]["active"] == 24000
+    assert normalize_rrf_globals([{"name": "x", "value": 1}]) == {"x": 1}
 
 
 def test_rrf_client_connect_invalid_password() -> None:
@@ -200,3 +285,39 @@ def test_milo_local_read_only_model_poll() -> None:
             prev_status = st
         if poll_n < 3:
             time.sleep(0.3)
+
+
+@skip_if_no_live_rrf
+@pytest.mark.rrf
+def test_milo_local_arborctl_globals_read_only() -> None:
+    """Dump ArborCTL globals (status / power / FC4 count) — no G-code."""
+    client = RrfClient(_MILO_BASE, password=_RRF_PASSWORD, timeout_s=5.0)
+    try:
+        conn = client.connect()
+    except RrfHttpError as e:
+        pytest.skip(f"Duet not reachable at {_MILO_BASE}: {e}")
+    _rrf_print_response("rr_connect", conn)
+    try:
+        g = client.fetch_globals()
+    except RrfHttpError as e:
+        pytest.skip(f"rr_model key=global failed: {e}")
+    _rrf_print_response("rr_model key=global (normalized)", {
+        k: g.get(k)
+        for k in (
+            "arborctlLdd",
+            "arborctlVer",
+            "arborVFDStatus",
+            "arborVFDPower",
+            "h100Fc4Count",
+            "arborVFDCommReady",
+            "arborMotorSpec",
+        )
+        if k in g
+    })
+    assert isinstance(g, dict)
+    try:
+        spindles = client.fetch_spindles()
+    except RrfHttpError as e:
+        pytest.skip(f"rr_model key=spindles failed: {e}")
+    _rrf_print_response("rr_model key=spindles (result)", spindles)
+    assert isinstance(spindles, list)

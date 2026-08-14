@@ -49,6 +49,46 @@ def test_modbus_logging_config_from_env(monkeypatch: pytest.MonkeyPatch) -> None
     assert cfg.include_coils is False
 
 
+def test_poll_registers_once_recording_relative_t_s(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When recording_t0_mono is set, t_s is monotonic-relative; ts is wall clock."""
+    import time
+
+    class FakeResp:
+        def __init__(self, regs: list[int]) -> None:
+            self.registers = regs
+            self.bits: list[bool] = []
+
+        def isError(self) -> bool:
+            return False
+
+    class FakeClient:
+        def read_holding_registers(self, address: int, count: int, slave: int = 1) -> FakeResp:
+            return FakeResp([0] * count)
+
+        def read_input_registers(self, address: int, count: int, slave: int = 1) -> FakeResp:
+            return FakeResp([0] * count)
+
+        def read_discrete_inputs(self, address: int, count: int, slave: int = 1) -> FakeResp:
+            return FakeResp([])
+
+        def read_coils(self, address: int, count: int, slave: int = 1) -> FakeResp:
+            return FakeResp([])
+
+    cfg = ModbusLoggingConfig(
+        max_holding=1,
+        max_input=1,
+        max_discrete=0,
+        max_coils=0,
+        include_discrete=False,
+        include_coils=False,
+    )
+    t0 = time.monotonic()
+    time.sleep(0.02)
+    row = poll_registers_once(FakeClient(), cfg, recording_t0_mono=t0)
+    assert 0.01 <= float(row["t_s"]) < 1.0
+    assert float(row["ts"]) > 1e9  # wall epoch
+
+
 def test_poll_registers_once_merges_reads(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeResp:
         def __init__(self, regs: list[int], err: bool = False) -> None:
