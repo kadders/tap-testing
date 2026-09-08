@@ -9,6 +9,7 @@ Examples::
   python -m tap_testing.live_spindle_service --job-sync
   python -m tap_testing.live_spindle_service --always-on
   python -m tap_testing.live_spindle_service --job-sync --tray
+  python -m tap_testing.live_spindle_service --video-test
 """
 from __future__ import annotations
 
@@ -26,23 +27,189 @@ from typing import Any, Callable
 
 from .config import get_config
 from .gcode_summary import summarize_gcode_bytes
+from .motion_sample import MotionPublishFilter, build_motion_sample
 from .mqtt_telemetry import try_create_publisher
 from .record_tap import record_stream
 from .rrf_http import (
     RrfClient,
     RrfHttpError,
     infer_print_job_active,
+    infer_job_sync_recording_active,
+    infer_job_sync_stop_reason,
     parse_current_tool,
+    parse_job_duration_s,
     parse_job_file_name,
+    parse_job_file_position,
+    parse_job_times_left_s,
+    parse_axis_positions_mm,
+    parse_requested_feed_mm_min,
     rrf_default_base_url,
     rrf_default_poll_interval_s,
 )
-from .spindle_telemetry import SpindleTelemetryRecorder
+from .spindle_telemetry import SpindleTelemetryRecorder, parse_arborctl_sample
 from .tool_telemetry import ToolEventRecorder
+from .video_recording import VideoSessionRecorder, run_video_test, try_create_video_recorder
 
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _tool_name_from_table(tools: list[dict[str, Any]] | None, tool_n: int | None) -> str | None:
+    """Return tool name from an RRF tools list, ``""`` if none, or None if unknown."""
+    if tool_n is None:
+        return None
+    if tool_n < 0:
+        return ""
+    if not tools:
+        return None
+    for t in tools:
+        try:
+            if int(t.get("number")) == int(tool_n):
+                name = t.get("name")
+                return name if isinstance(name, str) else ""
+        except (TypeError, ValueError):
+            continue
+    return ""
+
+
+def collect_video_overlay_fields(client: RrfClient) -> dict[str, Any]:
+    """Snapshot RRF fields for the video HUD. Missing bits are omitted or None."""
+    out: dict[str, Any] = {}
+    try:
+        state, job = client.fetch_state_and_job()
+    except RrfHttpError:
+        state, job = None, None
+    tool_n = parse_current_tool(state)
+    if tool_n is not None:
+        out["tool_number"] = tool_n
+    job_file = parse_job_file_name(job) or ""
+    if job_file:
+        out["job_file"] = job_file
+    out["job_duration_s"] = parse_job_duration_s(job)
+    out["job_times_left_s"] = parse_job_times_left_s(job)
+    if isinstance(state, dict):
+        st = state.get("status")
+        if isinstance(st, str) and st:
+            out["rrf_status"] = st
+    tools: list[dict[str, Any]] | None = None
+    try:
+        tools = client.fetch_tools()
+    except RrfHttpError:
+        tools = None
+    tool_name = _tool_name_from_table(tools, tool_n)
+    if tool_name is not None:
+        out["tool_name"] = tool_name
+    try:
+        move = client.fetch_move()
+        out["feed_mm_min"] = parse_requested_feed_mm_min(move)
+        out["axis_positions_mm"] = parse_axis_positions_mm(move)
+    except RrfHttpError:
+        out["feed_mm_min"] = None
+        out["axis_positions_mm"] = {}
+    try:
+        g_om = client.fetch_globals()
+    except RrfHttpError:
+        g_om = None
+    try:
+        spindles = client.fetch_spindles()
+    except RrfHttpError:
+        spindles = None
+    sample = parse_arborctl_sample(
+        g_om,
+        spindles=spindles,
+        tools=tools,
+        current_tool=tool_n,
+    )
+    if sample:
+        rpm = sample.get("rpm")
+        load = sample.get("load_percent")
+        if rpm is not None:
+            out["spindle_rpm"] = rpm
+        if sample.get("power_available") and load is not None:
+            out["spindle_load_percent"] = load
+    return out
+
+
+def run_live_video_test(
+    *,
+    duration_s: float,
+    output_dir: Path,
+    rrf_base: str,
+    rrf_password: str = "",
+    sample_rate_hz: float = 800.0,
+) -> int:
+    """Video smoke test with the same live overlay as a job (RRF + ADXL)."""
+    client: RrfClient | None = None
+    try:
+        client = RrfClient(rrf_base, password=rrf_password, timeout_s=5.0)
+        client.connect()
+        logger.info("Video test: RRF connected at %s — live overlay", rrf_base)
+    except RrfHttpError as e:
+        logger.warning(
+            "Video test: RRF unavailable (%s) — overlay will lack tool/feed/XYZA/RPM",
+            e,
+        )
+        client = None
+
+    adxl_stop = threading.Event()
+    adxl_thread: threading.Thread | None = None
+
+    def on_started(
+        run_dir: Path,
+        t0: float,
+        _session_id: str,
+        recorder: VideoSessionRecorder,
+    ) -> None:
+        nonlocal adxl_thread
+
+        def _on_sample(_t: float, x: float, y: float, z: float) -> None:
+            if recorder.active:
+                recorder.update_overlay(ax_g=x, ay_g=y, az_g=z)
+
+        def worker() -> None:
+            csv_path = Path(run_dir) / "homing.csv"
+            try:
+                record_stream(
+                    csv_path,
+                    adxl_stop,
+                    sample_rate_hz=sample_rate_hz,
+                    sample_callback=_on_sample,
+                    callback_interval_s=0.25,
+                    mqtt_manage_session=False,
+                    recording_t0_mono=t0,
+                    mqtt_idle_timeout_s=0.0,
+                )
+            except Exception:
+                logger.warning(
+                    "Video test: ADXL unavailable — overlay will lack accel bars",
+                    exc_info=True,
+                )
+
+        adxl_thread = threading.Thread(target=worker, name="video-test-adxl", daemon=True)
+        adxl_thread.start()
+
+    def overlay_tick(recorder: VideoSessionRecorder) -> None:
+        if client is None:
+            return
+        fields = collect_video_overlay_fields(client)
+        if not fields.get("job_file"):
+            fields["job_file"] = "video-test"
+        recorder.update_overlay(**fields)
+
+    def on_stopped() -> None:
+        adxl_stop.set()
+        if adxl_thread is not None:
+            adxl_thread.join(timeout=3.0)
+
+    return run_video_test(
+        duration_s=duration_s,
+        output_dir=output_dir,
+        overlay_tick=overlay_tick,
+        on_started=on_started,
+        on_stopped=on_stopped,
+        force_overlay=True,
+    )
 
 
 def rrf_default_tool_poll_interval_s() -> float:
@@ -70,8 +237,13 @@ class ServiceStatus:
     sample_rate_hz: float = 800.0
     output_path: str = ""
     last_error: str = ""
+    stop_reason: str = ""
     spindle_rpm: float | None = None
     spindle_load_percent: float | None = None
+    video_recording: bool = False
+    video_path: str = ""
+    youtube_live: bool = False
+    video_stream_remote: bool = False
     updated_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
@@ -141,6 +313,17 @@ class LiveSpindleService:
         self._session_idle_timeout_s = float(
             os.environ.get("MQTT_SESSION_IDLE_TIMEOUT_S", "25") or "25"
         )
+        self._job_sync_stop_grace_s = float(
+            os.environ.get("TAP_JOB_SYNC_STOP_GRACE_S", "3") or "3"
+        )
+        self._rrf_disconnect_stop_s = float(
+            os.environ.get("TAP_RRF_DISCONNECT_STOP_S", "3") or "3"
+        )
+        self._job_sync_inactive_since: float | None = None
+        self._rrf_disconnect_since: float | None = None
+        self._pending_stop_reason: str = ""
+        self._video_recorder: VideoSessionRecorder | None = try_create_video_recorder()
+        self._motion_filter = MotionPublishFilter()
         self.status = ServiceStatus(sample_rate_hz=self.sample_rate_hz)
 
     def _set_status(self, **kwargs: Any) -> None:
@@ -188,7 +371,7 @@ class LiveSpindleService:
 
     def stop(self) -> None:
         self._stop_service.set()
-        self.stop_recording()
+        self.stop_recording(reason="service_shutdown")
         if self._rrf_thread is not None:
             self._rrf_thread.join(timeout=5.0)
             self._rrf_thread = None
@@ -318,12 +501,39 @@ class LiveSpindleService:
             self._axis_letters = axes
             self._last_tools_fetch_mono = time.monotonic()
             self._last_adxl_mono = time.monotonic()
+        self._motion_filter = MotionPublishFilter()
 
         self._set_status(
             current_tool=tool_n,
             job_file=job_file or "",
             session_id=timestamp,
         )
+
+        video_rec = self._video_recorder
+        video_ok = False
+        if video_rec is not None:
+            video_ok = video_rec.start(
+                run_dir,
+                recording_t0_mono=recording_t0,
+                session_id=timestamp,
+                job_file=job_file,
+                tool_number=tool_n,
+                tool_name=tool_name,
+                mqtt_publisher=mqtt,
+            )
+            vpath = video_rec.output_path
+            if video_ok:
+                self._patch_run_meta_video(
+                    run_dir,
+                    enabled=True,
+                    video_path=str(vpath) if vpath else "",
+                )
+            self._set_status(
+                video_recording=video_ok and video_rec.active,
+                video_path=str(vpath) if vpath else "",
+                youtube_live=video_rec.youtube_live,
+                video_stream_remote=video_rec.video_stream_remote,
+            )
 
         def worker() -> None:
             self._set_status(
@@ -348,9 +558,16 @@ class LiveSpindleService:
                 except Exception:
                     pass
             try:
-                def _on_sample(_t: float, _x: float, _y: float, _z: float) -> None:
+                overlay_last_t = [0.0]
+                idle_timeout_ev = threading.Event()
+
+                def _on_sample(t: float, x: float, y: float, z: float) -> None:
                     with self._lock:
                         self._last_adxl_mono = time.monotonic()
+                    if video_rec is not None and video_rec.active:
+                        if t - overlay_last_t[0] >= 0.25:
+                            video_rec.update_overlay(ax_g=x, ay_g=y, az_g=z)
+                            overlay_last_t[0] = t
 
                 def _on_origin(t0: float) -> None:
                     recorder.set_recording_origin(t0)
@@ -361,7 +578,7 @@ class LiveSpindleService:
                     stop_ev,
                     sample_rate_hz=self.sample_rate_hz,
                     sample_callback=_on_sample,
-                    callback_interval_s=0.25,
+                    callback_interval_s=0.0,
                     mqtt=mqtt,
                     mqtt_mode=self.mqtt_mode,
                     mqtt_session_id=timestamp,
@@ -369,19 +586,47 @@ class LiveSpindleService:
                     recording_t0_mono=recording_t0,
                     on_recording_origin=_on_origin,
                     mqtt_idle_timeout_s=self._session_idle_timeout_s,
+                    idle_timeout_event=idle_timeout_ev,
                 )
+                if idle_timeout_ev.is_set():
+                    self._pending_stop_reason = "idle_timeout"
+                    logger.warning(
+                        "ADXL idle timeout (%.1fs) — session %s ended",
+                        self._session_idle_timeout_s,
+                        timestamp,
+                    )
+                    self._set_status(
+                        state="error",
+                        last_error=f"idle_timeout ({self._session_idle_timeout_s:.0f}s)",
+                        stop_reason="idle_timeout",
+                    )
             except Exception as e:
                 logger.exception("recording failed")
-                self._set_status(state="error", last_error=str(e), recording=False)
+                self._pending_stop_reason = "worker_exception"
+                self._set_status(
+                    state="error",
+                    last_error=str(e),
+                    recording=False,
+                    stop_reason="worker_exception",
+                )
                 if mqtt is not None:
                     try:
                         mqtt.publish_status(
                             "error",
-                            {"session_id": timestamp, "last_error": str(e)},
+                            {
+                                "session_id": timestamp,
+                                "last_error": str(e),
+                                "stop_reason": "worker_exception",
+                            },
                         )
                     except Exception:
                         pass
             finally:
+                if video_rec is not None and video_rec.active:
+                    try:
+                        video_rec.stop()
+                    except Exception:
+                        logger.exception("video stop failed")
                 with self._lock:
                     rec = self._tool_recorder
                     spindle_rec_end = self._spindle_recorder
@@ -400,11 +645,27 @@ class LiveSpindleService:
                         pass
                 if mqtt is not None:
                     try:
-                        mqtt.session_stop(tool_number=final_tool, job_file=job_file)
+                        stop_extra: dict[str, Any] = {}
+                        if self._pending_stop_reason:
+                            stop_extra["stop_reason"] = self._pending_stop_reason
+                        mqtt.session_stop(
+                            tool_number=final_tool,
+                            job_file=job_file,
+                            extra=stop_extra or None,
+                        )
                     except Exception:
                         pass
+                self._pending_stop_reason = ""
                 if not self._stop_service.is_set():
-                    self._set_status(state="idle", recording=False, session_id="")
+                    self._set_status(
+                        state="idle",
+                        recording=False,
+                        session_id="",
+                        video_recording=False,
+                        video_path="",
+                        youtube_live=False,
+                        video_stream_remote=False,
+                    )
 
         t = threading.Thread(target=worker, name="adxl-record", daemon=True)
         with self._lock:
@@ -412,19 +673,133 @@ class LiveSpindleService:
         t.start()
         logger.info("recording started → %s (tool=%s job=%s)", out_path, tool_n, job_file)
 
-    def stop_recording(self) -> None:
+    def _recording_join_timeout_s(self) -> float:
+        """Wait long enough for video_recording.stop() graceful + terminate/kill."""
+        rec = self._video_recorder
+        if rec is None:
+            return 15.0
+        if getattr(rec, "remote_mode", False):
+            return 15.0
+        cfg = getattr(rec, "cfg", None)
+        if cfg is None:
+            return 15.0
+        grace = cfg.stop_timeout_s + (5.0 if rec.youtube_live else 0.0)
+        return max(15.0, grace + 15.0)
+
+    def stop_recording(
+        self,
+        *,
+        reason: str = "manual",
+        rrf_status: str = "",
+    ) -> None:
+        self._pending_stop_reason = reason
         with self._lock:
             ev = self._rec_stop
             thr = self._rec_thread
         if ev is not None:
             ev.set()
+        join_s = self._recording_join_timeout_s()
         if thr is not None:
-            thr.join(timeout=10.0)
+            thr.join(timeout=join_s)
+            if thr.is_alive():
+                logger.warning(
+                    "recording worker still running after %.0fs (stop_reason=%s)",
+                    join_s,
+                    reason,
+                )
         with self._lock:
             self._rec_stop = None
             self._rec_thread = None
-        self._set_status(recording=False, state="idle" if not self._stop_service.is_set() else "stopping")
-        logger.info("recording stopped")
+            self._job_sync_inactive_since = None
+            self._rrf_disconnect_since = None
+        self._set_status(
+            recording=False,
+            state="idle" if not self._stop_service.is_set() else "stopping",
+            video_recording=False,
+            video_path="",
+            youtube_live=False,
+            video_stream_remote=False,
+            stop_reason=reason,
+        )
+        logger.info(
+            "recording stopped (reason=%s rrf_status=%s)",
+            reason,
+            rrf_status or self.status.rrf_status,
+        )
+
+    def _patch_run_meta_video(
+        self, run_dir: Path, *, enabled: bool, video_path: str = ""
+    ) -> None:
+        path = run_dir / "run-meta.json"
+        try:
+            meta: dict[str, Any] = {}
+            if path.exists():
+                meta = json.loads(path.read_text(encoding="utf-8"))
+            meta["video_enabled"] = enabled
+            if video_path:
+                meta["video_path"] = video_path
+            path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        except (OSError, json.JSONDecodeError, TypeError) as e:
+            logger.debug("run-meta video patch failed: %s", e)
+
+    def _update_video_overlay(
+        self,
+        *,
+        tool_n: int | None = None,
+        tool_name: str | None = None,
+        job_file: str | None = None,
+        rrf_status: str | None = None,
+        spindle_rpm: float | None = None,
+        spindle_load_percent: float | None = None,
+        feed_mm_min: float | None = None,
+        axis_positions_mm: dict[str, float] | None = None,
+        job_duration_s: float | None = None,
+        job_times_left_s: float | None = None,
+        set_feed: bool = False,
+        set_positions: bool = False,
+        set_job_times: bool = False,
+    ) -> None:
+        rec = self._video_recorder
+        if rec is None or not rec.active:
+            return
+        kwargs: dict[str, Any] = {}
+        if tool_n is not None:
+            kwargs["tool_number"] = tool_n
+        if tool_name is not None:
+            kwargs["tool_name"] = tool_name
+        if job_file:
+            kwargs["job_file"] = job_file
+        if rrf_status:
+            kwargs["rrf_status"] = rrf_status
+        if spindle_rpm is not None:
+            kwargs["spindle_rpm"] = spindle_rpm
+        if spindle_load_percent is not None:
+            kwargs["spindle_load_percent"] = spindle_load_percent
+        if set_feed:
+            kwargs["feed_mm_min"] = feed_mm_min
+        if set_positions:
+            kwargs["axis_positions_mm"] = dict(axis_positions_mm or {})
+        if set_job_times:
+            kwargs["job_duration_s"] = job_duration_s
+            kwargs["job_times_left_s"] = job_times_left_s
+        if kwargs:
+            rec.update_overlay(**kwargs)
+
+    def _note_rrf_poll_success(self) -> None:
+        self._rrf_disconnect_since = None
+
+    def _note_rrf_poll_failure(self, err: str) -> None:
+        now = time.monotonic()
+        if self._rrf_disconnect_since is None:
+            self._rrf_disconnect_since = now
+            logger.warning("RRF poll failed: %s — disconnect grace started", err)
+        with self._lock:
+            recording = self.status.recording
+        if not recording:
+            return
+        elapsed = now - self._rrf_disconnect_since
+        if self._rrf_disconnect_stop_s <= 0 or elapsed >= self._rrf_disconnect_stop_s:
+            self.stop_recording(reason="rrf_disconnect", rrf_status="disconnected")
 
     def _rrf_poll_loop(self) -> None:
         client = RrfClient(self.rrf_base, password=self.rrf_password, timeout_s=5.0)
@@ -446,8 +821,10 @@ class LiveSpindleService:
                     st = repr(st)
                 tool_n = parse_current_tool(state)
                 job_file = parse_job_file_name(job) or ""
+                job_duration_s = parse_job_duration_s(job)
+                job_times_left_s = parse_job_times_left_s(job)
                 if self.job_sync:
-                    self._on_job(active, st)
+                    self._on_job(state, job)
                 with self._lock:
                     rec = self._tool_recorder
                     recording = self.status.recording
@@ -510,43 +887,54 @@ class LiveSpindleService:
                                 self._set_status(**extra)
                     except Exception:
                         logger.debug("spindle telemetry observe failed", exc_info=True)
-                # Sample-idle watchdog: if ADXL stalls mid-job, emit end_session.
-                with self._lock:
-                    recording = self.status.recording
-                    last_adxl = self._last_adxl_mono
-                    idle_timeout = self._session_idle_timeout_s
-                    sid = self._session_id or ""
-                if (
-                    recording
-                    and idle_timeout > 0
-                    and last_adxl > 0
-                    and (time.monotonic() - last_adxl) >= idle_timeout
-                ):
-                    logger.warning(
-                        "ADXL idle timeout (%.1fs) — stopping session %s",
-                        idle_timeout,
-                        sid,
-                    )
+                feed_mm_min: float | None = None
+                axis_positions_mm: dict[str, float] = {}
+                if recording:
+                    try:
+                        move = client.fetch_move()
+                        feed_mm_min = parse_requested_feed_mm_min(move)
+                        axis_positions_mm = parse_axis_positions_mm(move)
+                    except RrfHttpError as e:
+                        logger.debug("fetch_move failed: %s", e)
+                tool_name = _tool_name_from_table(tools, tool_n)
+                self._update_video_overlay(
+                    tool_n=tool_n,
+                    tool_name=tool_name,
+                    job_file=job_file,
+                    rrf_status=st,
+                    spindle_rpm=self.status.spindle_rpm,
+                    spindle_load_percent=self.status.spindle_load_percent,
+                    feed_mm_min=feed_mm_min,
+                    axis_positions_mm=axis_positions_mm,
+                    job_duration_s=job_duration_s,
+                    job_times_left_s=job_times_left_s,
+                    set_feed=True,
+                    set_positions=True,
+                    set_job_times=True,
+                )
+                if recording:
                     mqtt = self._mqtt
-                    if mqtt is not None:
-                        try:
-                            mqtt.publish_status(
-                                "error",
-                                {
-                                    "session_id": sid,
-                                    "last_error": "idle_timeout",
-                                    "idle_timeout_s": idle_timeout,
-                                },
+                    rec = self._tool_recorder
+                    if mqtt is not None and rec is not None and rec.active:
+                        sid = self._session_id or ""
+                        if sid:
+                            file_pos = parse_job_file_position(job)
+                            sample = build_motion_sample(
+                                session_id=sid,
+                                device_id=mqtt.device_id,
+                                t_s=rec.elapsed_s(),
+                                axis_positions_mm=axis_positions_mm,
+                                feed_mm_min=feed_mm_min,
+                                job_file=job_file or None,
+                                file_position=file_pos,
+                                rrf_status=st,
+                                tool_number=tool_n,
                             )
-                        except Exception:
-                            pass
-                    self._set_status(
-                        state="error",
-                        last_error=f"idle_timeout ({idle_timeout:.0f}s)",
-                        recording=False,
-                    )
-                    self.stop_recording()
-                    continue
+                            if sample is not None and self._motion_filter.should_publish(sample):
+                                try:
+                                    mqtt.publish_motion_sample(sample)
+                                except Exception:
+                                    logger.debug("motion MQTT publish failed", exc_info=True)
                 self._set_status(
                     rrf_connected=True,
                     rrf_status=st,
@@ -555,8 +943,10 @@ class LiveSpindleService:
                     job_file=job_file,
                     session_id=self._session_id or "",
                 )
+                self._note_rrf_poll_success()
             except RrfHttpError as e:
                 self._set_status(rrf_connected=False, last_error=f"RRF poll: {e}")
+                self._note_rrf_poll_failure(str(e))
                 try:
                     client.connect()
                 except RrfHttpError:
@@ -567,7 +957,16 @@ class LiveSpindleService:
             if self._stop_service.wait(wait_s):
                 break
 
-    def _on_job(self, active: bool, status_s: str) -> None:
+    def _on_job(self, state: dict[str, Any] | None, job: dict[str, Any] | None) -> None:
+        active = infer_print_job_active(state, job)
+        st = (state or {}).get("status", "?")
+        if not isinstance(st, str):
+            st = repr(st)
+        with self._lock:
+            recording = self.status.recording
+        track_active = (
+            infer_job_sync_recording_active(state, job) if recording else active
+        )
         prev = self._last_job_active
         if prev is None:
             if active:
@@ -575,12 +974,32 @@ class LiveSpindleService:
         else:
             if not prev and active:
                 self.start_recording()
-            elif prev and not active:
-                self.stop_recording()
+            elif recording and not track_active:
+                # Use ``recording``, not ``prev`` — ``_last_job_active`` may already
+                # be False while grace is counting down (homing_gui edge-tracking).
+                stop_reason = infer_job_sync_stop_reason(state, job)
+                now = time.monotonic()
+                if self._job_sync_stop_grace_s <= 0:
+                    self.stop_recording(reason=stop_reason, rrf_status=st)
+                elif self._job_sync_inactive_since is None:
+                    self._job_sync_inactive_since = now
+                    logger.info(
+                        "RRF job ended (status=%s reason=%s) — grace %.1fs before stop",
+                        st,
+                        stop_reason,
+                        self._job_sync_stop_grace_s,
+                    )
+                elif (now - self._job_sync_inactive_since) >= self._job_sync_stop_grace_s:
+                    self.stop_recording(reason=stop_reason, rrf_status=st)
+            elif track_active:
+                self._job_sync_inactive_since = None
         # Keep tracking only if recording started, same as homing_gui
         with self._lock:
             recording = self.status.recording
-        self._last_job_active = active if (recording or not active) else False
+        if self._job_sync_inactive_since is not None and recording:
+            self._last_job_active = True
+        else:
+            self._last_job_active = track_active if (recording or not track_active) else False
 
 
 def _try_run_tray(service: LiveSpindleService, stop_event: threading.Event) -> bool:
@@ -709,7 +1128,33 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("TAP_LIVE_TRAY", "").strip().lower() in ("1", "true", "yes"),
         help="Show system tray icon when a display is available",
     )
+    parser.add_argument(
+        "--video-test",
+        action="store_true",
+        help="Record a timed video with live RRF/ADXL overlay (and optional YouTube) then exit",
+    )
+    parser.add_argument(
+        "--video-test-s",
+        type=float,
+        default=30.0,
+        metavar="SEC",
+        help="Duration for --video-test (default 30)",
+    )
     args = parser.parse_args(argv)
+
+    if args.video_test:
+        rrf_base = args.rrf_base
+        if rrf_base.rstrip("/") in ("http://milo.local", "http://milo") and Path("/run/dsf").exists():
+            rrf_base = "http://127.0.0.1"
+        test_dir = args.output_dir / "video-test"
+        rate = args.rate if args.rate is not None else cfg.sample_rate_hz
+        return run_live_video_test(
+            duration_s=args.video_test_s,
+            output_dir=test_dir,
+            rrf_base=rrf_base,
+            rrf_password=args.rrf_password,
+            sample_rate_hz=rate,
+        )
 
     if args.mode is None:
         if os.environ.get("TAP_LIVE_ALWAYS_ON", "").strip().lower() in ("1", "true", "yes"):

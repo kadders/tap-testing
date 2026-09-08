@@ -1,0 +1,25 @@
+#!/bin/sh
+# InnoMaker U20-16MP-AF USB UVC launcher for ustreamer.service.
+# Install: sudo cp deploy/ustreamer/ustreamer-arducam /usr/local/sbin/
+#          sudo cp deploy/ustreamer/ustreamer.default /etc/default/ustreamer
+# Do NOT use --slowdown: it paces capture to slow consumers and adds visible lag.
+set -eu
+set -a
+. /etc/default/ustreamer
+set +a
+# AE "dynamic framerate" lets the sensor drop below --desired-fps in low light.
+# Disable so captured_fps can track USTREAMER_FPS (InnoMaker U20 / UVC).
+if command -v v4l2-ctl >/dev/null 2>&1; then
+  v4l2-ctl -d "$USTREAMER_DEVICE" --set-ctrl=exposure_dynamic_framerate=0 >/dev/null 2>&1 || true
+fi
+exec /usr/bin/ustreamer \
+  --device "$USTREAMER_DEVICE" \
+  --format MJPEG \
+  --encoder HW \
+  --resolution "$USTREAMER_RESOLUTION" \
+  --desired-fps "$USTREAMER_FPS" \
+  --host "$USTREAMER_HOST" \
+  --port "$USTREAMER_PORT" \
+  --allow-origin=* \
+  --device-timeout 5 \
+  --device-error-delay 2

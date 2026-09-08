@@ -270,6 +270,7 @@ tap-testing/
     inspect_tap_data.py  # Per-file or per-cycle stats and signal check
     mqtt_telemetry.py    # Optional MQTT publisher (TAP_MQTT_HOST → Jarvis tap_collector)
     live_spindle_service.py  # Headless live spindle + RRF job sync + MQTT (systemd)
+    video_recording.py       # Optional ustreamer → ffmpeg session video + YouTube tee
     spindle_telemetry.py     # ArborCTL OM → spindle JSONL + MQTT
     docs/             # Documentation helpers (no runtime logic)
       generate_example_chart.py   # Example chart images (synthetic data)
@@ -286,13 +287,13 @@ tap-testing/
 
 ## Data format
 
-Recorded CSVs have header `t_s, ax_g, ay_g, az_g`, a comment line `# sample_rate_hz, <value>`, then one row per sample. Analysis uses this to infer sample rate and run the FFT. Sampling output (tap CSVs, cycle runs, homing recordings) is written under `data/`. Each homing run is saved in a timestamped directory `data/live_spindle/homing/<YYYYmmdd_HHMMSS>/homing.csv` so scripts can reference the run by timestamp. Live-spindle jobs also write `tool-events.jsonl` and `spindle-telemetry.jsonl` beside `homing.csv`. The `data/` directory is git-ignored.
+Recorded CSVs have header `t_s, ax_g, ay_g, az_g`, a comment line `# sample_rate_hz, <value>`, then one row per sample. Analysis uses this to infer sample rate and run the FFT. Sampling output (tap CSVs, cycle runs, homing recordings) is written under `data/`. Each homing run is saved in a timestamped directory `data/live_spindle/homing/<YYYYmmdd_HHMMSS>/homing.csv` so scripts can reference the run by timestamp. Live-spindle jobs also write `tool-events.jsonl` and `spindle-telemetry.jsonl` beside `homing.csv`. With `TAP_VIDEO_ENABLED=1`, each job run may also include `session.mp4` and `video-meta.json` — see **[docs/VIDEO_RECORDING.md](docs/VIDEO_RECORDING.md)**. The `data/` directory is git-ignored.
 
 ## Optional MQTT telemetry (Jarvis)
 
 When `TAP_MQTT_HOST` is set and `paho-mqtt` is installed, recording/analysis also publish batched accel, session events, analysis summaries, optional Modbus rows, and (during live-spindle jobs) ArborCTL spindle speed/load to Mosquitto for the Jarvis `tap_collector` service. See **[docs/MQTT_TELEMETRY.md](docs/MQTT_TELEMETRY.md)** (setup) and **[docs/MQTT_PAYLOAD_REFERENCE.md](docs/MQTT_PAYLOAD_REFERENCE.md)** (wire format).
 
-**Boot service on DuetPi / SBC:** `python -m tap_testing.live_spindle_service` (job-sync with RRF, MQTT, optional tray). Install with `sudo bash scripts/install_live_spindle_service.sh` — see **[docs/LIVE_SPINDLE_SERVICE.md](docs/LIVE_SPINDLE_SERVICE.md)**.
+**Boot service on DuetPi / SBC:** `python -m tap_testing.live_spindle_service` (job-sync with RRF, MQTT, optional tray). Install with `sudo bash scripts/install_live_spindle_service.sh` — see **[docs/LIVE_SPINDLE_SERVICE.md](docs/LIVE_SPINDLE_SERVICE.md)**. Optional per-job video from ustreamer with telemetry overlay and YouTube Live: **[docs/VIDEO_RECORDING.md](docs/VIDEO_RECORDING.md)** (Pi ffmpeg) or **[docs/VIDEO_STREAMING.md](docs/VIDEO_STREAMING.md)** (cluster remote mode).
 
 ## License
 

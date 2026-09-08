@@ -34,6 +34,8 @@ session (start) ──► accel/batch* ──► tool* ──► spindle* ──
 | `analysis` | 1 | `analyze` / `run_cycle` | After FFT / RPM guidance |
 | `modbus` | 0 | Homing GUI Modbus poll | One row per successful poll |
 | `spindle` | 0 | `live_spindle_service` via MQTT | ArborCTL Hz / RPM / optional load while a job is recording |
+| `motion` | 0 | `live_spindle_service` via MQTT | Structured XYZ(A) from `rr_model` poll during recording |
+| `video_overlay` | 0 | `live_spindle_service` / video recorder | Pre-rendered HUD text for cluster tap-stream (not sim UI) |
 | `status` | 1 | Publisher lifecycle | Connect, SBC gate, recording, idle, error |
 
 ---
@@ -64,7 +66,7 @@ session (start) ──► accel/batch* ──► tool* ──► spindle* ──
   "event": "start",
   "event_type": "start_session",
   "session_id": "20260718_213000",
-  "device_id": "milo-sbc",
+  "device_id": "milo",
   "mode": "live_spindle",
   "sample_rate_hz": 800.0,
   "ts": 1710000000.0,
@@ -102,6 +104,7 @@ session (start) ──► accel/batch* ──► tool* ──► spindle* ──
 | `n_samples` | int | optional | If caller provides |
 | `tool_number` | int | optional | Final tool |
 | `job_file` | string | if known | From start cache or explicit arg |
+| `stop_reason` | string | optional | `idle_timeout`, `job_completed`, `job_no_file`, `job_sync_inactive`, `rrf_halted`, `rrf_shutdown`, `rrf_disconnect`, `worker_exception`, `service_shutdown`, `manual` |
 
 ### `tap_detected`
 
@@ -143,6 +146,82 @@ Batched windows of accelerometer samples (g). One batch is flushed when the time
 ```
 
 Correlate sample *i* to recording time: `t_s ≈ t0_s + i * dt_s`.
+
+---
+
+## `video_overlay`
+
+**Topic:** `tap/{device_id}/video_overlay` · QoS 0
+
+Pre-rendered HUD text for cluster **tap-stream** (YouTube live overlay). Published by `tap-spindle` when `TAP_VIDEO_MODE=remote` at ~5 Hz (`TAP_VIDEO_OVERLAY` interval).
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `session_id` | string | Active session |
+| `t_s` | float | Recording-relative elapsed (s) |
+| `text` | string | Multi-line overlay (tool, RPM, XYZA, ADXL bars) |
+| `ts` | float | Wall clock |
+
+```json
+{
+  "session_id": "20260819_110000",
+  "t_s": 12.4,
+  "text": "t=12.4s  job=0:05:00\nT1 Endmill\nRPM 24000  Load 23.3%\nX 1.0  Y 2.0  Z 3.0\n|a|=0.975g\nX +0.044 [        |        ]",
+  "ts": 1787165433.86
+}
+```
+
+**tap-stream fallback:** if `video_overlay` is stale (> `TAP_STREAM_OVERLAY_STALE_S`, default 0.5s), accel lines may be rebuilt from the latest `accel/batch` last sample while keeping the last RRF lines from the previous overlay frame.
+
+**Not for sim UI:** XYZA in `text` is not machine-parseable. Use **`motion`** below for Jarvis replay/sim.
+
+---
+
+## `motion`
+
+**Topic:** `tap/{device_id}/motion` · QoS 0
+
+Structured machine coordinates from **`live_spindle_service._rrf_poll_loop`** (same `axis_positions_mm` as the video HUD). Throttled by delta filter (`TAP_MOTION_POS_EPS_MM`, `TAP_MOTION_ROT_EPS_DEG`, `TAP_MOTION_HEARTBEAT_S`).
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `schema_version` | int | yes | `1` |
+| `session_id` | string | yes | |
+| `device_id` | string | yes | Topic device segment |
+| `t_s` | float | yes | Recording-relative (ADXL origin) |
+| `ts` | float | yes | Wall clock |
+| `x`, `y`, `z` | float | yes | mm (`userPosition` → `machinePosition` fallback) |
+| `a` | float | if present on machine | 4th-axis degrees |
+| `axis_positions_mm` | object | yes | Full RRF axis map |
+| `source` | string | yes | `tap_rrf_poll` |
+| `coord_frame` | string | yes | `user` or `machine` |
+| `feed_mm_min` | float | optional | From `move` |
+| `file_position` | int | optional | RRF byte offset |
+| `job_file` | string | optional | |
+| `rrf_status` | string | optional | e.g. `processing` |
+| `tool_number` | int | optional | Current RRF slot |
+
+```json
+{
+  "schema_version": 1,
+  "session_id": "20260819_110000",
+  "device_id": "milo",
+  "t_s": 12.34,
+  "ts": 1787165433.86,
+  "x": 10.5,
+  "y": -3.2,
+  "z": -1.0,
+  "a": 45.0,
+  "axis_positions_mm": {"X": 10.5, "Y": -3.2, "Z": -1.0, "A": 45.0},
+  "source": "tap_rrf_poll",
+  "coord_frame": "user",
+  "feed_mm_min": 1350,
+  "file_position": 9000,
+  "job_file": "0:/gcodes/part.gcode",
+  "rrf_status": "processing",
+  "tool_number": 3
+}
+```
 
 ---
 
@@ -347,7 +426,7 @@ Always includes `device_id`, `ts`; may include `session_id`, `mode`, `job_file`,
 ```json
 {
   "state": "recording",
-  "device_id": "milo-sbc",
+  "device_id": "milo",
   "ts": 1710000000.0,
   "session_id": "20260718_213000",
   "mode": "live_spindle",

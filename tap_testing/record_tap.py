@@ -158,6 +158,7 @@ def record_stream(
     job_file: str | None = None,
     mqtt_extra: dict | None = None,
     mqtt_idle_timeout_s: float | None = None,
+    idle_timeout_event: threading.Event | None = None,
 ) -> Path:
     """
     Record a single continuous stream of ADXL data until stop_event is set.
@@ -184,6 +185,7 @@ def record_stream(
         mqtt_extra: Optional extra fields on start_session (e.g. gcode_sha256).
         mqtt_idle_timeout_s: If set (or via MQTT_SESSION_IDLE_TIMEOUT_S, default 25),
             stop the stream when no samples arrive for that many seconds.
+        idle_timeout_event: If set, marked when the idle watchdog fires.
 
     Returns:
         Path to the written file.
@@ -238,6 +240,8 @@ def record_stream(
         while not stop_event.is_set():
             if time.monotonic() - last_sample_mono[0] >= idle_timeout_s:
                 idle_triggered.set()
+                if idle_timeout_event is not None:
+                    idle_timeout_event.set()
                 stop_event.set()
                 return
             if stop_event.wait(timeout=0.5):
@@ -285,6 +289,7 @@ def record_stream(
                         "session_id": mqtt_session_id,
                         "last_error": "idle_timeout",
                         "idle_timeout_s": idle_timeout_s,
+                        "stop_reason": "idle_timeout",
                     },
                 )
             except Exception:

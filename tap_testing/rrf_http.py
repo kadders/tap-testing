@@ -45,6 +45,17 @@ _JOB_ACTIVE_STATUSES = frozenset(
     }
 )
 
+# Status values that mean the file job is finished (not paused mid-print).
+_JOB_TERMINAL_STATUSES = frozenset(
+    {
+        "idle",
+        "completed",
+        "halted",
+        "off",
+        "shutdown",
+    }
+)
+
 
 def rrf_default_poll_interval_s() -> float:
     return float(os.environ.get("TAP_RRF_POLL_S", "1.0"))
@@ -74,6 +85,38 @@ def infer_print_job_active(state: dict[str, Any] | None, job: dict[str, Any] | N
     if st == "starting" and _job_has_file(job):
         return True
     return False
+
+
+def infer_job_sync_recording_active(
+    state: dict[str, Any] | None,
+    job: dict[str, Any] | None,
+) -> bool:
+    """True while a file job is actively running (job-sync stop when this goes false)."""
+    if not _job_has_file(job):
+        return False
+    if not state:
+        return False
+    st = state.get("status")
+    if isinstance(st, str) and st in _JOB_TERMINAL_STATUSES:
+        return False
+    return infer_print_job_active(state, job)
+
+
+def infer_job_sync_stop_reason(
+    state: dict[str, Any] | None,
+    job: dict[str, Any] | None,
+) -> str:
+    """Label for why job-sync decided recording should end."""
+    st = (state or {}).get("status") if state else None
+    if st == "completed":
+        return "job_completed"
+    if not _job_has_file(job):
+        return "job_no_file"
+    if st == "halted":
+        return "rrf_halted"
+    if st in ("off", "shutdown"):
+        return "rrf_shutdown"
+    return "job_sync_inactive"
 
 
 def is_sbc_mode(sbc: Any) -> bool:
@@ -216,6 +259,27 @@ class RrfClient:
             return [s if isinstance(s, dict) else {} for s in raw]
         return []
 
+    def fetch_move(self) -> dict[str, Any] | None:
+        """Return the ``move`` object-model subtree, or None if missing."""
+        raw = self.model("move", "v")
+        return raw if isinstance(raw, dict) else None
+
+    def fetch_current_move(self) -> dict[str, Any] | None:
+        """
+        Return ``move.currentMove`` (requestedSpeed / topSpeed in mm/s).
+
+        Falls back to the ``move`` subtree if the narrow key is empty.
+        """
+        raw = self.model("move.currentMove", "v")
+        if isinstance(raw, dict) and raw:
+            return raw
+        move = self.fetch_move()
+        if isinstance(move, dict):
+            cm = move.get("currentMove")
+            if isinstance(cm, dict) and cm:
+                return cm
+        return None
+
     def send_gcode(self, line: str) -> dict[str, Any]:
         """Queue G/M/T-code via ``/rr_gcode`` (RRF OpenAPI). May move axes or run the spindle; use with care.
 
@@ -303,6 +367,89 @@ def parse_job_file_position(job: dict[str, Any] | None) -> int | None:
         return int(raw)
     except (TypeError, ValueError):
         return None
+
+
+def _as_finite_float(raw: Any) -> float | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if v != v or v in (float("inf"), float("-inf")):  # NaN / inf
+        return None
+    return v
+
+
+def parse_job_duration_s(job: dict[str, Any] | None) -> float | None:
+    """Elapsed job time in seconds from ``job.duration``, if present."""
+    if not job:
+        return None
+    return _as_finite_float(job.get("duration"))
+
+
+def parse_job_times_left_s(job: dict[str, Any] | None) -> float | None:
+    """Estimated remaining seconds from ``job.timesLeft.file``, if present and finite."""
+    if not job:
+        return None
+    left = job.get("timesLeft")
+    if not isinstance(left, dict):
+        return None
+    return _as_finite_float(left.get("file"))
+
+
+def parse_requested_feed_mm_min(move: dict[str, Any] | None) -> float | None:
+    """
+    Current requested feed in mm/min.
+
+    RRF ``move.currentMove.requestedSpeed`` is mm/s. Accepts either a currentMove
+    dict or a full ``move`` object. Returns None when missing or speed is 0.
+    """
+    if not move:
+        return None
+    cm = move.get("currentMove") if "currentMove" in move else move
+    if not isinstance(cm, dict):
+        return None
+    mm_s = _as_finite_float(cm.get("requestedSpeed"))
+    if mm_s is None or mm_s <= 0:
+        return None
+    return mm_s * 60.0
+
+
+def parse_axis_positions_mm(move_or_axes: dict[str, Any] | list[Any] | None) -> dict[str, float]:
+    """
+    Named axis positions from ``move.axes``.
+
+    Prefers ``userPosition`` (work coordinates, what DWC shows) and falls back
+    to ``machinePosition``. Omits axes with no finite position. Letter order
+    follows the object-model array.
+    """
+    axes: list[Any] | None = None
+    if isinstance(move_or_axes, list):
+        axes = move_or_axes
+    elif isinstance(move_or_axes, dict):
+        raw = move_or_axes.get("axes")
+        if isinstance(raw, list):
+            axes = raw
+    if not axes:
+        return {}
+    out: dict[str, float] = {}
+    for i, ax in enumerate(axes):
+        if not isinstance(ax, dict):
+            continue
+        letter = ax.get("letter")
+        if isinstance(letter, str) and letter.strip():
+            key = letter.strip().upper()
+        else:
+            key = f"A{i}"
+        pos = ax.get("userPosition")
+        if pos is None:
+            pos = ax.get("machinePosition")
+        val = _as_finite_float(pos)
+        if val is None:
+            continue
+        out[key] = val
+    return out
 
 
 def summarize_tool(tool: dict[str, Any]) -> dict[str, Any]:

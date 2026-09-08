@@ -85,6 +85,31 @@ def test_infer_print_job_active(
     assert infer_print_job_active(state, job) is expected
 
 
+def test_infer_job_sync_recording_active() -> None:
+    from tap_testing.rrf_http import infer_job_sync_recording_active
+
+    job = {"file": {"fileName": "0:/gcodes/part.gcode"}}
+    assert infer_job_sync_recording_active({"status": "processing"}, job) is True
+    assert infer_job_sync_recording_active({"status": "paused"}, job) is True
+    assert infer_job_sync_recording_active({"status": "completed"}, job) is False
+    assert infer_job_sync_recording_active({"status": "idle"}, job) is False
+    assert infer_job_sync_recording_active({"status": "busy"}, job) is False
+    assert infer_job_sync_recording_active({"status": "processing"}, None) is False
+    assert infer_job_sync_recording_active({"status": "idle"}, None) is False
+
+
+def test_infer_job_sync_stop_reason() -> None:
+    from tap_testing.rrf_http import infer_job_sync_stop_reason
+
+    job = {"file": {"fileName": "0:/gcodes/part.gcode"}}
+    assert infer_job_sync_stop_reason({"status": "completed"}, job) == "job_completed"
+    assert infer_job_sync_stop_reason({"status": "idle"}, None) == "job_no_file"
+    assert infer_job_sync_stop_reason({"status": "busy"}, job) == "job_sync_inactive"
+    assert infer_job_sync_stop_reason({"status": "halted"}, job) == "rrf_halted"
+    assert infer_job_sync_stop_reason({"status": "off"}, job) == "rrf_shutdown"
+    assert infer_job_sync_stop_reason({"status": "shutdown"}, job) == "rrf_shutdown"
+
+
 def test_parse_current_tool_and_job_file() -> None:
     from tap_testing.rrf_http import (
         parse_current_tool,
@@ -101,6 +126,70 @@ def test_parse_current_tool_and_job_file() -> None:
         "number": 1,
         "name": "a",
     }
+
+
+def test_parse_job_duration_times_left_and_feed() -> None:
+    from tap_testing.rrf_http import (
+        parse_job_duration_s,
+        parse_job_times_left_s,
+        parse_requested_feed_mm_min,
+    )
+
+    assert parse_job_duration_s(None) is None
+    assert parse_job_duration_s({}) is None
+    assert parse_job_duration_s({"duration": 3862}) == 3862.0
+    assert parse_job_times_left_s(None) is None
+    assert parse_job_times_left_s({"timesLeft": {"file": 90}}) == 90.0
+    assert parse_job_times_left_s({"timesLeft": {"file": None}}) is None
+    assert parse_requested_feed_mm_min(None) is None
+    assert parse_requested_feed_mm_min({"requestedSpeed": 30}) == 1800.0
+    assert parse_requested_feed_mm_min({"currentMove": {"requestedSpeed": 25}}) == 1500.0
+    assert parse_requested_feed_mm_min({"requestedSpeed": 0}) is None
+    assert parse_requested_feed_mm_min({}) is None
+
+
+def test_parse_axis_positions_mm() -> None:
+    from tap_testing.rrf_http import parse_axis_positions_mm
+
+    assert parse_axis_positions_mm(None) == {}
+    assert parse_axis_positions_mm({}) == {}
+    axes = [
+        {"letter": "X", "userPosition": 12.345, "machinePosition": 0.0},
+        {"letter": "Y", "userPosition": -3.2},
+        {"letter": "Z", "machinePosition": 1.0},
+        {"letter": "A", "userPosition": 90},
+        {"letter": "B"},
+    ]
+    assert parse_axis_positions_mm({"axes": axes}) == {
+        "X": 12.345,
+        "Y": -3.2,
+        "Z": 1.0,
+        "A": 90.0,
+    }
+    assert parse_axis_positions_mm(axes)["A"] == 90.0
+    assert parse_axis_positions_mm([{"letter": "X", "userPosition": "nan"}]) == {}
+
+
+def test_fetch_current_move_narrow_then_fallback() -> None:
+    client = RrfClient("http://dummy")
+    calls: list[str] = []
+
+    def fake(path: str, query: dict[str, str]) -> dict:
+        if path == "/rr_connect":
+            return {"err": 0}
+        key = query.get("key", "")
+        calls.append(key)
+        if key == "move.currentMove":
+            return {"result": {}}
+        if key == "move":
+            return {"result": {"currentMove": {"requestedSpeed": 10}}}
+        raise AssertionError(f"unexpected {path} {query}")
+
+    with patch.object(client, "_request_json", side_effect=fake):
+        client.connect()
+        cm = client.fetch_current_move()
+    assert cm == {"requestedSpeed": 10}
+    assert calls == ["move.currentMove", "move"]
 
 @pytest.mark.parametrize(
     ("sbc", "expected"),

@@ -24,7 +24,7 @@ export TAP_RRF_BASE=http://127.0.0.1
 
 export TAP_MQTT_HOST=mqtt.jarvis.lan
 export TAP_MQTT_PORT=1883           # standard MQTT port
-export TAP_MQTT_DEVICE_ID=milo-sbc
+export TAP_MQTT_DEVICE_ID=milo
 # TAP_MQTT_REQUIRE_SBC=1 is the default — MQTT only if rr_model.sbc is set
 
 pip install paho-mqtt
@@ -80,7 +80,7 @@ One parent `session_id` covers the whole recording (all accel batches, tool even
   "event": "start",
   "event_type": "start_session",
   "session_id": "uuid",
-  "device_id": "milo-sbc",
+  "device_id": "milo",
   "mode": "tap|cycle|stream|homing|live_spindle",
   "sample_rate_hz": 800.0,
   "ts": 1710000000.0,
@@ -236,10 +236,12 @@ H100 load comes from ArborCTL’s FC4 monitor (13 words). Short clones (`h100Fc4
 | `TAP_RRF_TOOL_POLL_S` | `0.25` | Selection / job poll interval while recording |
 | `TAP_RRF_TOOL_TABLE_POLL_S` | `1.0` | Full tool-table refresh while recording (offset diffs) |
 | `MQTT_SESSION_IDLE_TIMEOUT_S` | `25` | Edge watchdog: stop recording / emit `end_session` if no ADXL samples for this many seconds (slightly under collector idle so the publisher usually wins) |
+| `TAP_JOB_SYNC_STOP_GRACE_S` | `3` | Seconds RRF job must stay inactive before job-sync stop (0 = immediate) |
+| `TAP_RRF_DISCONNECT_STOP_S` | `3` | Seconds RRF HTTP may fail while recording before `stop_reason=rrf_disconnect` (0 = immediate) |
 
 ## Session idle / fault close
 
-- **Publisher (this package):** `record_stream` and `LiveSpindleService` watch last ADXL sample time. After `MQTT_SESSION_IDLE_TIMEOUT_S` with no samples they publish `status=error` (`last_error: idle_timeout`) and stop so `end_session` still runs in `finally`.
+- **Publisher (this package):** `record_stream` idle watchdog (single path). After `MQTT_SESSION_IDLE_TIMEOUT_S` with no samples it sets `stop_reason=idle_timeout`, publishes `status=error`, and stops so `end_session` still runs in `finally`.
 - **Collector (Jarvis):** if `end_session` is lost, idle sweep finalizes after `TAP_COLLECTOR_IDLE_TIMEOUT_S` (default 30s), including empty sessions that never received batches.
 
 ## Dependency
@@ -256,6 +258,8 @@ See sibling repo `jarvis` → `docs/services/tap-collector.md` (Compose profile 
 
 ## Duet / RRF MQTT (publish only)
 
-RRF **3.6+** can connect to Mosquitto and publish with `M118 L6`, but MQTT **subscribe** only shows text in DWC and does **not** execute G-code. **Do not** subscribe Duet to `tap/#`.
+RRF **3.6+** can connect to Mosquitto and publish with **`M118 P6`** (`P6` = MQTT message type; do not use `L6` — `L` is log level 0–3). MQTT **subscribe** only shows text in DWC and does **not** execute G-code. **Do not** subscribe Duet to `tap/#`.
 
-To send machine tool/job events into Jarvis, publish to `duet/{machine}/…` (see jarvis tap-collector docs). Live ADXL, the tool timeline, and ArborCTL spindle samples from `live_spindle_service` remain on `tap/{device}/…`.
+On **SBC**, configure **`M586 P4`** in **`dsf-config.g`** on the Pi (not SD `config.g` / `nxt-user-overrides.g`). See [LIVE_SPINDLE_SERVICE.md](LIVE_SPINDLE_SERVICE.md) and `scripts/diagnose_rrf_mqtt.sh`.
+
+To send machine tool/job events into Jarvis, publish to `duet/{machine}/…` (see jarvis tap-collector docs). Sim jobs from 4th-combinator use `cam/{device}/…`. Live ADXL, the tool timeline, and ArborCTL spindle samples from `live_spindle_service` remain on `tap/{device}/…`.

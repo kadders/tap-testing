@@ -9,13 +9,18 @@ TAP_RRF_POLL_S=1.0
 # Host only: do not include mqtt:// or a port in this value.
 TAP_MQTT_HOST=mqtt.jarvis.lan
 TAP_MQTT_PORT=1883
-TAP_MQTT_DEVICE_ID=milo-sbc
+TAP_MQTT_DEVICE_ID=milo
 TAP_MQTT_REQUIRE_SBC=1
 # TAP_MQTT_FORCE=1
 
 # Recording mode: job sync (default) or always-on
 TAP_LIVE_JOB_SYNC=1
 # TAP_LIVE_ALWAYS_ON=1
+
+# Stop recording when ADXL samples stall (seconds); see docs/LIVE_SPINDLE_SERVICE.md
+# MQTT_SESSION_IDLE_TIMEOUT_S=25
+# Grace before job-sync stop when RRF leaves active set (seconds; 0 = immediate)
+# TAP_JOB_SYNC_STOP_GRACE_S=3
 
 TAP_LIVE_STATUS_PATH=/run/tap-spindle/status.json
 TAP_LOG_LEVEL=INFO
@@ -27,3 +32,41 @@ TAP_SPI_BUS=0
 TAP_SPI_DEVICE=0
 # TAP_SPI_FIRST_BYTE_DATA=1
 # For I2C instead: TAP_ADXL345_INTERFACE=i2c  (SDA GPIO2 / SCL GPIO3)
+
+# --- Session video (optional; live_spindle_service job-sync only) ---
+# local: ffmpeg on Pi. remote: cluster tap-stream writes session.mp4 on shared NFS
+# (+ optional YouTube). Prefer remote on Milo so ADXL is not starved by encode.
+# See docs/VIDEO_RECORDING.md (local) and docs/VIDEO_STREAMING.md (remote).
+# TAP_VIDEO_ENABLED=1
+# TAP_VIDEO_MODE=remote
+# TAP_VIDEO_DIR=/mnt/recordings
+# TAP_USTREAMER_URL=http://127.0.0.1:8081/stream
+# TAP_VIDEO_OVERLAY=1
+# TAP_VIDEO_FPS=30
+# TAP_VIDEO_BITRATE=1800k
+# TAP_VIDEO_MAX_WIDTH=640
+# TAP_VIDEO_ENCODER=libx264
+# (local mode only; recommended if encoding on Pi — auto h264_v4l2m2m can SIGBUS)
+# TAP_VIDEO_ENCODER=h264_v4l2m2m
+# Camera orientation (applied before overlay). Rotate: 0, 90, 180, 270 clockwise.
+# TAP_VIDEO_ROTATE=90
+# Flip: h, v, or hv (horizontal / vertical / both)
+# TAP_VIDEO_FLIP=
+# Directory for session.mp4 / overlay / video-meta (one subdir per session_id).
+# Unset = same folder as homing.csv. Prefer /mnt/recordings with TAP_VIDEO_MODE=remote.
+# TAP_VIDEO_DIR=/mnt/recordings
+# Overlay font (optional; defaults to DejaVu/FreeSans/Liberation if installed)
+# TAP_VIDEO_FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+# Overlay accel bar full-scale in g (default 2). Resting Z is ~1 g.
+# TAP_VIDEO_ACCEL_SCALE_G=2
+
+# Remote streaming (TAP_VIDEO_MODE=remote): remove TAP_YOUTUBE_* from Pi.
+# Cluster writes {TAP_VIDEO_DIR}/{session_id}/session.mp4; optional YT key →
+# jarvis k8s Secret jarvis-tap-stream-secret
+# TAP_VIDEO_MODE=remote
+
+# YouTube Live on Pi (TAP_VIDEO_MODE=local; all required or RTMP is skipped)
+# TAP_YOUTUBE_ENABLED=1
+# TAP_YOUTUBE_STREAM_KEY=
+# Default ingest: rtmp://a.rtmp.youtube.com/live2 (do not set unless Studio shows another host)
+# TAP_YOUTUBE_RTMP_URL=rtmp://a.rtmp.youtube.com/live2

@@ -6,6 +6,50 @@ Notable changes to this project are documented here.
 
 ### Added
 
+- **Remote YouTube streaming** (`TAP_VIDEO_MODE=remote`): Pi publishes
+  `tap/{device}/video_overlay` over MQTT; cluster `tap-stream` (Jarvis k8s)
+  pulls Pi MJPEG and encodes to YouTube RTMP. See `docs/VIDEO_STREAMING.md`.
+- ustreamer launcher template without `--slowdown` (`deploy/ustreamer/`).
+- Source validation script: `scripts/check_ustreamer_source.sh`.
+- Cluster manual test script: `scripts/cluster_youtube_stream_test.sh`.
+- Status JSON field: `video_stream_remote`.
+- MQTT topic `video_overlay` documented in `docs/MQTT_PAYLOAD_REFERENCE.md`.
+- Recording **stop_reason** in status JSON, MQTT `end_session`, and
+  `scripts/diagnose_recording_stop.sh`.
+- Job-sync stop grace (`TAP_JOB_SYNC_STOP_GRACE_S`, default 3s) and stop on
+  `completed` / cleared file / non-active status (no longer treats `busy`+file
+  as still recording after job end).
+- Single ADXL idle watchdog in `record_stream` (removed duplicate RRF-poll path).
+- Local job video uses wall-clock PTS + CFR at `TAP_VIDEO_FPS` (default 15) and
+  optional `TAP_VIDEO_MAX_WIDTH` (default 640) so session duration matches the job
+  instead of collapsing into a short sped-up clip when the Pi falls behind.
+- Gentler ffmpeg shutdown: `q` then wait before SIGINT; clearer SIGBUS log hinting
+  at `TAP_VIDEO_ENCODER=libx264`.
+- RRF sim MQTT diagnostics: `scripts/diagnose_rrf_mqtt.sh`, `scripts/ensure_rrf_mqtt.sh`;
+  docs clarify SBC `M586 P4` belongs in `dsf-config.g` (not `nxt-user-overrides.g`) and
+  `M118 P6` (not `L6`) for MQTT publish.
+
+### Added (earlier)
+- Optional session video for `live_spindle_service`: ustreamer MJPEG → ffmpeg →
+  `session.mp4` per job with live telemetry overlay aligned to
+  `recording_t0_mono`.
+- Optional YouTube Live RTMP tee (gated preflight: requires `TAP_VIDEO_ENABLED`,
+  `TAP_YOUTUBE_ENABLED`, and `TAP_YOUTUBE_STREAM_KEY`; skips with logged reason
+  when any setting is missing). Default ingest: `rtmp://a.rtmp.youtube.com/live2`.
+- `tap_testing/video_recording.py`, unit tests, and `docs/VIDEO_RECORDING.md`
+  (YouTube setup steps, daemon env, preflight skip reasons).
+- Status JSON fields: `video_recording`, `video_path`, `youtube_live`.
+- Session video orientation via `TAP_VIDEO_ROTATE` (0/90/180/270 clockwise) and
+  `TAP_VIDEO_FLIP` (`h`/`v`/`hv`) in `/etc/default/tap-spindle`.
+- Session video save path via `TAP_VIDEO_DIR` (`{dir}/{session_id}/session.mp4`;
+  unset keeps files beside `homing.csv`).
+- `--video-test` (default 30s) smoke-tests ustreamer → ffmpeg with the same live
+  RRF/ADXL overlay as a job, plus the YouTube preflight
+  (`scripts/video_test.sh`).
+- Video overlay HUD: spindle RPM/load, installed tool (name refreshed on change),
+  live feed mm/min, XYZA work positions from `move.axes`, RRF job
+  elapsed/remaining when present, and ADXL X/Y/Z level-meter bars
+  (`TAP_VIDEO_ACCEL_SCALE_G`).
 - Optional MQTT telemetry for Jarvis, including batched accelerometer samples,
   session lifecycle events, analysis summaries, Modbus rows, ArborCTL spindle
   speed/load, service status, and RRF tool events.
