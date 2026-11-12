@@ -1,0 +1,1312 @@
+#Author-Tim Paterson
+#Description-Post process all CAM setups, using the setup name as the output file name.
+
+import adsk.core, adsk.fusion, adsk.cam, traceback, shutil, json, os, os.path, time, re, pathlib, enum, tempfile
+
+# Version number of settings as saved in documents and settings file
+# update this whenever settings content changes
+version = 8
+
+# Initial default values of settings
+defaultSettings = {
+    "version" : version,
+    "post" : "",
+    "units" : adsk.cam.PostOutputUnitOptions.MillimetersOutput,
+    "output" : "",
+    "sequence" : True,
+    "twoDigits" : False,
+    "delFiles" : False,
+    "delFolder" : False,
+    "splitSetup" : False,
+    "fastZ" : False,
+    "toolChange" : "",
+    "fileExt" : ".gcode",
+    "numericName" : False,
+    "endCodes" : "",
+    "onlySelected" : False,
+    # Groups are expanded or not
+    "groupOutput" : True,
+    "groupPersonal" : True,
+    "groupPost" : True,
+    "groupAdvanced" : False,
+    # Retry policy
+    "initialDelay" : 0.2,
+    "postRetries" : 3
+}
+
+# Constants
+constCmdName = "Post Process All"
+constCmdDefId = "PatersonTech_PostProcessAll"
+constCAMWorkspaceId = "CAMEnvironment"
+constCAMActionsPanelId = "CAMActionPanel"
+constPostProcessControlId = "IronPostProcess"
+constCAMProductId = "CAMProductType"
+constAttrGroup = constCmdDefId
+constAttrName = "settings"
+constSettingsFileExt = ".settings"
+constPostLoopDelay = 0.1
+constBodyTmpFile = "gcodeBody"
+constOpTmpFile = "8910"   # in case name must be numeric (Fusion Personal Use / post API)
+constRapidZgcode = 'G0 Z{} (Changed from: "{}")\n'
+constRapidXYgcode = 'G0 {} (Changed from: "{}")\n'
+constFeedZgcode = 'G1 Z{} F{} (Changed from: "{}")\n'
+constFeedXYgcode = 'G1 {} F{} (Changed from: "{}")\n'
+constFeedXYZgcode = 'G1 {} Z{} F{} (Changed from: "{}")\n'
+constAddFeedGcode = " F{} (Feed rate added)\n"
+constMotionGcodeSet = {0,1,2,3,33,38,73,76,80,81,82,84,85,86,87,88,89}
+constHomeGcodeSet = {28, 30}
+constLineNumInc = 5
+
+# Tool tip text
+toolTip = (
+    "Post process all setups into G-code for your machine.\n\n"
+    "The name of the setup is used for the name of the output "
+    "file adding the .nc extension. A colon (':') in the name indicates "
+    "the preceding portion is the name of a subfolder. Multiple "
+    "colons can be used to nest subfolders. Spaces around colons "
+    "are removed.\n\n"
+    "Setups within a folder are optionally preceded by a "
+    "sequence number. This identifies the order in which the "
+    "setups appear. The sequence numbers for each folder begin "
+    "with 1."
+    )
+
+# Global list to keep all event handlers in scope.
+# This is only needed with Python.
+handlers = []
+
+# Global settingsMgr object
+settingsMgr = None
+
+def run(context):
+    global settingsMgr
+    ui = None
+    try:
+        settingsMgr = SettingsManager()
+        app = adsk.core.Application.get()
+        ui  = app.userInterface
+        InitAddIn()
+
+    except:
+        if ui:
+            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+
+class SettingsManager:
+    def __init__(self):
+        self.default = None
+        self.path = None
+        self.fMustSave = False
+        self.inputs = None
+
+    def GetSettings(self, docAttr):
+        docSettings = None
+        attr = docAttr.itemByName(constAttrGroup, constAttrName)
+        if attr:
+            try:
+                docSettings = json.loads(attr.value)
+                if docSettings["version"] == version:
+                    return docSettings
+            except Exception:
+                pass
+            
+        # Document does not have valid settings, get defaults
+        if not self.default:
+            # Haven't read the settings file yet
+            file = None
+            try:
+                file = open(self.GetPath())
+                self.default = json.load(file)
+                # never allow delFiles or delFolder to default to True
+                self.default["delFiles"] = False
+                self.default["delFolder"] = False
+                if self.default["version"] != version:
+                    self.UpdateSettings(defaultSettings, self.default)
+            except Exception:
+                self.default = dict(defaultSettings)
+                self.fMustSave = True
+            finally:
+                if file:
+                    file.close
+        
+        if not docSettings:
+            docSettings = dict(self.default)
+        else:
+            self.UpdateSettings(self.default, docSettings)
+        return docSettings
+
+    def SaveDefault(self, docSettings):
+        self.fMustSave = False
+        self.default = dict(docSettings)
+        # never allow delFiles or delFolder to default to True
+        self.default["delFiles"] = False
+        self.default["delFolder"] = False
+        try:
+            strSettings = json.dumps(docSettings)
+            file = open(self.GetPath(), "w")
+            file.write(strSettings)
+            file.close
+        except Exception:
+            pass
+
+    def SaveSettings(self, docAttr, docSettings):
+        if self.fMustSave:
+            self.SaveDefault(docSettings)
+        docAttr.add(constAttrGroup, constAttrName, json.dumps(docSettings))
+            
+    def UpdateSettings(self, src, dst):
+        if "homeEndsOp" in dst:
+            if dst["homeEndsOp"] and not ("endCodes" in dst):
+                dst["endCodes"] = "M5 M9 M30 G28 G30"
+            del dst["homeEndsOp"]
+        for item in src:
+            if not (item in dst):
+                dst[item] = src[item]
+        dst["version"] = src["version"]
+
+    def GetPath(self):
+        if not self.path:
+            pos = __file__.rfind(".")
+            if pos == -1:
+                pos = len(__file__)
+            self.path = __file__[0:pos] + constSettingsFileExt
+        return self.path
+
+
+def InitAddIn():
+    ui = None
+    try:
+        app = adsk.core.Application.get()
+        ui  = app.userInterface
+
+        # Create a button command definition.
+        cmdDefs = ui.commandDefinitions
+        cmdDef = cmdDefs.addButtonDefinition(constCmdDefId, constCmdName, toolTip, "resources/Command")
+        
+        # Connect to the commandCreated event.
+        commandEventHandler = CommandEventHandler()
+        cmdDef.commandCreated.add(commandEventHandler)
+        handlers.append(commandEventHandler)
+        
+        # Get the Actions panel in the Manufacture workspace.
+        workSpace = ui.workspaces.itemById(constCAMWorkspaceId)
+        addInsPanel = workSpace.toolbarPanels.itemById(constCAMActionsPanelId)
+        
+        # Add the button right after the Post Process command.
+        cmdControl = addInsPanel.controls.addCommand(cmdDef, constPostProcessControlId, False)
+        cmdControl.isPromotedByDefault = True
+        cmdControl.isPromoted = True
+
+    except:
+        if ui:
+            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+
+def CountOutputFolderFiles(folder, limit, fileExt):
+    cntFiles = 0
+    cntNcFiles = 0
+    for path, dirs, files in os.walk(folder):
+        for file in files:
+            if file.endswith(fileExt):
+                cntNcFiles += 1
+            else:
+                cntFiles += 1
+        if cntFiles > limit:
+            return "many files that are not G-code"
+        if cntNcFiles > limit * 1.5:
+            return "many more G-code files than are produced by this design"
+    return None
+
+
+# Event handler for the commandCreated event.
+class CommandEventHandler(adsk.core.CommandCreatedEventHandler):
+    def __init__(self):
+        super().__init__()
+
+    def notify(self, args):
+        try:
+            eventArgs = adsk.core.CommandCreatedEventArgs.cast(args)
+            cmd = eventArgs.command
+
+            # Get document attributes that will set initial values
+            app = adsk.core.Application.get()
+            docSettings  = settingsMgr.GetSettings(app.activeDocument.attributes)
+
+            # See if we're doing only selected setups
+            selectedSetups = list()
+            product = app.activeDocument.products.itemByProductType(constCAMProductId)
+            if product != None:
+                for setup in product.setups:
+                    if setup.isSelected:
+                        selectedSetups.append(setup)
+                        
+            # Add inputs that will appear in a dialog
+            inputs = cmd.commandInputs
+
+            # output folder
+            inputGroup = inputs.addGroupCommandInput("groupOutput", "Output Folder")
+            input = inputGroup.children.addStringValueInput("output", "", docSettings["output"])
+            input.isFullWidth = True
+            input.tooltip = "Output Folder"
+            input.tooltipDescription = (
+                "Full path name of the output folder. Any subfolders, as denoted "
+                "by colons in the setup name, will be relative this folder.")
+
+            input = inputGroup.children.addBoolValueInput("browseOutput", "Browse", False)
+            input.resourceFolder = "resources/Browse"
+            input.tooltip = "Browse for Output Folder"
+            inputGroup.isExpanded = docSettings["groupOutput"]
+
+            # check box to use only selected setups
+            input = inputs.addBoolValueInput("onlySelected", 
+                                             "Only selected setups", 
+                                             True, 
+                                             "", 
+                                             docSettings["onlySelected"])
+            input.tooltip = "Only Process Selected Setups"
+            input.tooltipDescription = (
+                "Only setups selected in the browser will be processed. Note "
+                "that a selected setup will be highlighted, not simply activated. "
+                "Selecting individual operations within a setup has no effect."
+            )
+            input.isEnabled = len(selectedSetups) != 0
+
+            # check box to delete existing files
+            input = inputs.addBoolValueInput("delFiles", 
+                                             "Delete existing files", 
+                                             True, 
+                                             "", 
+                                             docSettings["delFiles"])
+            input.tooltip = "Delete Existing Files in Each Folder"
+            input.tooltipDescription = (
+                "Delete all files in each output folder before post processing. "
+                "This will help prevent accumulation of G-code files which are "
+                "no longer used."
+                "<p>For example, you could decide to add sequence numbers after "
+                "already post processing without them. If this option is not "
+                "checked, you will have two of each file, a newer one with a "
+                "sequence number and older one without. With this option checked, "
+                "all previous files will be deleted so only current results will "
+                "be present.</p>"
+                "<p>This option will only delete the files in folders in which new "
+                "G-code files are being written. If you change the name of a "
+                "folder, for example, it will not be deleted.</p>")
+
+            # check box to delete entire output folder
+            input = inputs.addBoolValueInput("delFolder", 
+                                             "Delete output folder", 
+                                             True, 
+                                             "", 
+                                             docSettings["delFolder"] and docSettings["delFiles"])
+            input.isEnabled = docSettings["delFiles"] # enable only if delete existing files
+            input.tooltip = "Delete Entire Output Folder First"
+            input.tooltipDescription = (
+                "Delete the entire output folder before post processing. This "
+                "deletes all files and subfolders regardless of whether or not "
+                "new G-code files are written to a particular folder."
+                "<p><b>WARNING!</b> Be absolutely sure the output folder is set "
+                "correctly before selecting this option. Run the command once "
+                "before setting this option and verify the results are in the "
+                "correct folder. An incorrect setting of the output folder with "
+                "this option selected could result in unintentionally wiping out "
+                "a vast number of files.</p>")
+
+            # check box to prepend sequence numbers
+            input = inputs.addBoolValueInput("sequence", 
+                                             "Prepend sequence number", 
+                                             True, 
+                                             "", 
+                                             docSettings["sequence"])
+            input.tooltip = "Add Sequence Numbers to Name"
+            input.tooltipDescription = (
+                "Begin each file name with a sequence number. The numbering "
+                "represents the order that the setups appear in the browser tree. "
+                "Each folder has its own sequence numbers starting with 1.")
+
+            # check box to select 2-digit sequence numbers
+            input = inputs.addBoolValueInput("twoDigits", 
+                                             "Use 2-digit numbers", 
+                                             True, 
+                                             "", 
+                                             docSettings["twoDigits"])
+            input.isEnabled = docSettings["sequence"] # enable only if using sequence numbers
+            input.tooltip = "Use 2-Digit Sequence Numbers"
+            input.tooltipDescription = (
+                "Sequence numbers 0 - 9 will have a leading zero added, becoming"
+                '"01" to "09". This could be useful for formatting or sorting.')
+
+            # "Personal Use" version
+            # check box to split up setup into individual operations
+            inputGroup = inputs.addGroupCommandInput("groupPersonal", "Personal Use")
+            input = inputGroup.children.addBoolValueInput("splitSetup",
+                                                          "Use individual operations",
+                                                          True,
+                                                          "",
+                                                          docSettings["splitSetup"])
+            input.tooltip = "Split Setup Into Individual Operations"
+            input.tooltipDescription = (
+                "Generate output for each operation individually. This is usually "
+                "REQUIRED when using Fusion 360 for Personal Use, because tool "
+                "changes are not allowed. The individual operations will be "
+                "grouped back together into the same file, eliminating this "
+                "limitation. You will get an error if there is a tool change "
+                "in a setup and this options is not selected.")
+
+            # check box to enable restoring rapid moves
+            input = inputGroup.children.addBoolValueInput("fastZ",
+                                                          "Restore rapid moves",
+                                                          True,
+                                                          "",
+                                                          docSettings["fastZ"])
+            input.isEnabled = docSettings["splitSetup"] # enable only if using individual operations
+            input.tooltip = "Restore Rapid Moves (Experimental)"
+            input.tooltipDescription = (
+                "Replace appropriate moves at feed rate with rapid (G0) moves. "
+                "In Fusion 360 for Personal Use, moves that could be rapid are "
+                "now limited to the current feed rate. When this option is selected, "
+                "the G-code will be analyzed to find moves at or above the feed "
+                "height and replace them with rapid moves."
+                "<p><b>WARNING!<b> This option should be used with caution. "
+                "Review the G-code to verify it is correct. Comments have been "
+                "added to indicate the changes.")
+           
+            inputGroup.isExpanded = docSettings["groupPersonal"]
+
+            # Advanced -- retry settings
+            inputGroup = inputs.addGroupCommandInput("groupAdvanced", "Advanced")
+            # Time delay
+            input = inputGroup.children.addFloatSpinnerCommandInput("initialDelay", 
+                "Initial time allowance", "s", 0.1, 1.0, 0.1, docSettings["initialDelay"])
+            input.tooltip = "Initial Time to Post Process an Operation"
+            input.tooltipDescription = (
+                "Initial delay to wait for post processor. Doubled for each retry.")
+            # Retry count
+            input = inputGroup.children.addIntegerSpinnerCommandInput("postRetries", 
+                "Number of retries", 1, 9, 1, docSettings["postRetries"])
+            input.tooltip = "Number of Retries"
+            input.tooltipDescription = (
+                "Retries if post processing failed. Time delay is doubled each retry.")
+            inputGroup.isExpanded = docSettings["groupAdvanced"]
+            
+            # post processor
+            inputGroup = inputs.addGroupCommandInput("groupPost", "Post Processor")
+            input = inputGroup.children.addStringValueInput("post", "", docSettings["post"])
+            input.isFullWidth = True
+            input.tooltip = "Post Processor"
+            input.tooltipDescription = (
+                "Full path name of the post processor (.cps file).")
+            
+            # Browse for post processor
+            input = inputGroup.children.addBoolValueInput("browsePost", "Browse", False)
+            input.resourceFolder = "resources/Browse"
+            input.tooltip = "Browse for Post Processor"
+            inputGroup.isExpanded = docSettings["groupPost"]
+
+            # Numeric name required?
+            input = inputGroup.children.addBoolValueInput("numericName",
+                                                          "Name must be numeric",
+                                                          True,
+                                                          "",
+                                                          docSettings["numericName"])
+            input.tooltip = "Output File Name Must Be Numeric"
+            input.tooltipDescription = (
+                "The name of the setup will not be used in the file name, "
+                "only sequence numbers. The option to prepend sequence numbers "
+                "will have no effect.")
+
+            # File name extension
+            input = inputGroup.children.addStringValueInput("fileExt", "Output file extension", docSettings["fileExt"])
+            input.tooltip = "Output File Extension"
+            
+            # button to save default settings
+            input = inputs.addBoolValueInput("save", "Save as default", False)
+            input.resourceFolder = "resources/Save"
+            input.tooltip = "Save These Settings as System Default"
+            input.tooltipDescription = (
+                "Save these settings to use as the default for each new design.")
+
+            # text box for error messages
+            input = inputs.addTextBoxCommandInput("error", "", "", 3, True)
+            input.isFullWidth = True
+            input.isVisible = False
+
+            # Connect to the inputChanged event.
+            onInputChanged = CommandInputChangedHandler(docSettings)
+            cmd.inputChanged.add(onInputChanged)
+            handlers.append(onInputChanged)
+
+            # Connect to the validateInputs event.
+            onValidateInputs = CommandValidateInputsHandler()
+            cmd.validateInputs.add(onValidateInputs)
+            handlers.append(onValidateInputs)
+
+            # Connect to the execute event.
+            onExecute = CommandExecuteHandler(docSettings, selectedSetups)
+            cmd.execute.add(onExecute)
+            handlers.append(onExecute)
+        except:
+            ui = app.userInterface
+            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+# Event handler for the inputChanged event.
+class CommandInputChangedHandler(adsk.core.InputChangedEventHandler):
+    def __init__(self, docSettings):
+        self.docSettings = docSettings
+        super().__init__()
+
+    def notify(self, args):
+        app = adsk.core.Application.get()
+        ui  = app.userInterface
+        try:
+            eventArgs = adsk.core.InputChangedEventArgs.cast(args)
+            inputs = eventArgs.inputs
+
+            doc = app.activeDocument
+            product = doc.products.itemByProductType(constCAMProductId)
+
+            # See if button clicked
+            input = eventArgs.input
+            if input.id == "save":
+                settingsMgr.SaveDefault(self.docSettings)
+                
+            elif input.id == "browsePost":
+                dialog = ui.createFileDialog()
+                post = self.docSettings["post"]
+                if len(post) != 0:
+                    dialog.initialFilename = post
+                else:
+                    dialog.initialDirectory = product.genericPostFolder
+
+                dialog.filter = "post processors (*.cps);;All files (*.*)"
+                dialog.title = "Select post processor"
+                if dialog.showOpen() == adsk.core.DialogResults.DialogOK:
+                    self.docSettings["post"] = dialog.filename
+                    inputs.itemById("post").value = dialog.filename
+
+            elif input.id == "browseOutput":
+                dialog = ui.createFolderDialog()
+                dialog.initialDirectory = self.docSettings["output"]
+                dialog.title = "Select output folder"
+                if dialog.showDialog() == adsk.core.DialogResults.DialogOK:
+                    self.docSettings["output"] = dialog.folder
+                    inputs.itemById("output").value = dialog.folder
+
+            elif input.id == "units":
+                self.docSettings[input.id] = input.selectedItem.index
+
+            elif input.id in self.docSettings:
+                if input.objectType == adsk.core.GroupCommandInput.classType():
+                    self.docSettings[input.id] = input.isExpanded
+                else:
+                    self.docSettings[input.id] = input.value
+
+            # Enable twoDigits only if sequence is true
+            if input.id == "sequence":
+                inputs.itemById("twoDigits").isEnabled = input.value
+
+            # Enable delFolder only if delFiles is true
+            if input.id == "delFiles":
+                item = inputs.itemById("delFolder")
+                item.value = input.value and item.value
+                item.isEnabled = input.value
+
+            # Options for splitSetup
+            if input.id == "splitSetup":
+                inputs.itemById("toolChange").isEnabled = input.value
+                inputs.itemById("toolLabel").isEnabled = input.value
+                inputs.itemById("endCodes").isEnabled = input.value
+                inputs.itemById("endLabel").isEnabled = input.value
+                inputs.itemById("fastZ").isEnabled = input.value
+
+        except:
+            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+
+# Event handler for the validateInputs event.
+class CommandValidateInputsHandler(adsk.core.ValidateInputsEventHandler):
+    def __init__(self):
+        super().__init__()
+
+    def notify(self, args):
+        app = adsk.core.Application.get()
+        ui  = app.userInterface
+        try:
+            eventArgs = adsk.core.ValidateInputsEventArgs.cast(args)
+            inputs = eventArgs.firingEvent.sender.commandInputs
+
+            fIsOutputValid = len(inputs.itemById("output").value) != 0
+            post = inputs.itemById("post").value
+            fIsPostValid = post.endswith(".cps") and os.path.isfile(post)
+            eventArgs.areInputsValid = fIsOutputValid and fIsPostValid
+            error = inputs.itemById("error")
+            error.isVisible = not eventArgs.areInputsValid
+            if not eventArgs.areInputsValid:
+                # Build a message explaining what's missing
+                err1 = err2 = combine = ""
+                if not fIsOutputValid:
+                    err1 = "the output folder"
+                    # ensure it's not collapsed
+                    inputs.itemById("groupOutput").isExpanded = True
+                if not fIsPostValid:
+                    err2 = "a valid post processor"
+                    # ensure it's not collapsed
+                    inputs.itemById("groupPost").isExpanded = True
+                if not fIsOutputValid and not fIsPostValid:
+                    combine = " and "
+                msg = "<b>Please select {}{}{}.</b>".format(err1, combine, err2)
+                # Display message
+                error.formattedText = msg
+        except:
+            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+
+# Event handler for the execute event.
+class CommandExecuteHandler(adsk.core.CommandEventHandler):
+    def __init__(self, docSettings, selectedSetups):
+        self.docSettings = docSettings
+        self.selectedSetups = selectedSetups
+        super().__init__()
+
+    def notify(self, args):
+        eventArgs = adsk.core.CommandEventArgs.cast(args)
+
+        # Code to react to the event.
+        PerformPostProcess(self.docSettings, self.selectedSetups)
+
+
+def stop(context):
+    ui = None
+    try:
+        app = adsk.core.Application.get()
+        ui  = app.userInterface
+
+        # Clean up the UI.
+        cmdDef = ui.commandDefinitions.itemById(constCmdDefId)
+        if cmdDef:
+            cmdDef.deleteMe()
+            
+        addinsPanel = ui.allToolbarPanels.itemById(constCAMActionsPanelId)
+        cmdControl = addinsPanel.controls.itemById(constCmdDefId)
+        if cmdControl:
+            cmdControl.deleteMe()
+    except:
+        if ui:
+            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))	
+
+
+def PerformPostProcess(docSettings, setups):
+    ui = None
+    progress = None
+    try:
+        app = adsk.core.Application.get()
+        ui  = app.userInterface
+        doc = app.activeDocument
+
+        # Save settings in document attributes
+        settingsMgr.SaveSettings(doc.attributes, docSettings)
+
+        cntFiles = 0
+        cntSkipped = 0
+        lstSkipped = ""
+        product = doc.products.itemByProductType(constCAMProductId)
+
+        if product != None:
+            cam = adsk.cam.CAM.cast(product)
+            if len(setups) == 0 or not docSettings["onlySelected"]:
+                setups = list()
+                # move all setups into a list
+                for setup in cam.setups:
+                    setups.append(setup)
+            progress = ui.createProgressDialog()
+            progress.isCancelButtonShown = True
+            progress.show("Generating toolpaths...", "Beginning toolpath generation", 0, 1)
+            progress.progressValue = 1 # try to get it to display
+            progress.progressValue = 0
+
+            if len(setups) != 0 and cam.allOperations.count != 0:
+                # make sure we're not going to delete too much
+                outputFolder = docSettings["output"]
+                if docSettings["delFolder"]:
+                    strMsg = CountOutputFolderFiles(outputFolder, len(setups), docSettings["fileExt"])
+                    if strMsg:
+                        docSettings["delFolder"] = False
+                        strMsg = (
+                            "The output folder contains {}. "
+                            "It will not be deleted. You may wish to make sure you selected "
+                            "the correct folder. If you want the folder deleted, you must "
+                            "do it manually."
+                            ).format(strMsg)
+                        res = ui.messageBox(strMsg, 
+                                            constCmdName,
+                                            adsk.core.MessageBoxButtonTypes.OKCancelButtonType,
+                                            adsk.core.MessageBoxIconTypes.WarningIconType)
+                        if res == adsk.core.DialogResults.DialogCancel:
+                            return  # abort!
+
+                # generate toolpaths with progess dialog
+                genStat = cam.generateAllToolpaths(True)
+                if not genStat.isGenerationCompleted:
+                    progress.maximumValue = genStat.numberOfOperations
+                    progress.message = "Generating toolpath %v of %m"
+                    while not genStat.isGenerationCompleted:
+                        if progress.wasCancelled:
+                            return  #abort!
+                        progress.progressValue = genStat.numberOfCompleted
+                        time.sleep(.1)
+
+                if False and not cam.checkAllToolpaths():   # checkAllToolpaths() always throws exception
+                    res = ui.messageBox("Some toolpaths are not valid. If you continue, affected Setups will be skipped", 
+                                        constCmdName,
+                                        adsk.core.MessageBoxButtonTypes.OKCancelButtonType,
+                                        adsk.core.MessageBoxIconTypes.WarningIconType)
+                    if res == adsk.core.DialogResults.DialogCancel:
+                        return  # abort!
+                
+                if docSettings["delFolder"]:
+                    try:
+                        shutil.rmtree(outputFolder, True)
+                    except:
+                        pass #ignore errors
+
+                progressMsg = "{} files written to " + outputFolder
+                progress.show("Post Processing...", "", 0, len(setups))
+                progress.progressValue = 1 # try to get it to display
+                progress.progressValue = 0
+
+                cntSetups = 0
+                seqDict = dict()
+
+                # We pass through all setups even if only some are selected
+                # so numbering scheme doesn't change.
+                for setup in cam.setups:
+                    if progress.wasCancelled:
+                        break
+                    if not setup.isSuppressed and setup.allOperations.count != 0:
+                        nameList = setup.name.split(':')    # folder separator
+                        setupFolder = outputFolder
+                        cnt = len(nameList) - 1
+                        i = 0
+                        while i < cnt:
+                            setupFolder += "/" + nameList[i].strip()
+                            i += 1
+                    
+                        # keep a separate sequence number for each folder
+                        if setupFolder in seqDict:
+                            seqDict[setupFolder] += 1
+                            # skip if we're not actually including this setup
+                            if setup not in setups:
+                                continue
+                        else:
+                            # first file for this folder
+                            seqDict[setupFolder] = 1
+                            # skip if we're not actually including this setup
+                            if setup not in setups:
+                                continue
+
+                            if (docSettings["delFiles"]):
+                                # delete all the files in the folder
+                                try:
+                                    for entry in os.scandir(setupFolder):
+                                        if entry.is_file():
+                                            try:
+                                                os.remove(entry.path)
+                                            except:
+                                                pass #ignore errors
+                                except:
+                                    pass #ignore errors
+
+                        # prepend sequence number if enabled
+                        fname = nameList[i].strip()
+                        if docSettings["sequence"] or docSettings["numericName"]:
+                            seq = seqDict[setupFolder]
+                            seqStr = str(seq)
+                            if docSettings["twoDigits"] and seq < 10:
+                                seqStr = "0" + seqStr
+                            if docSettings["numericName"]:
+                                fname = seqStr
+                            else:
+                                fname = seqStr + ' ' + fname
+
+                        # post the file
+                        status = PostProcessSetup(fname, setup, setupFolder, docSettings)
+                        if status == None:
+                            cntFiles += 1
+                        else:
+                            cntSkipped += 1
+                            lstSkipped += "\nFailed on setup " + setup.name + ": " + status
+                         
+                    cntSetups += 1
+                    progress.message = progressMsg.format(cntFiles)
+                    progress.progressValue = cntSetups
+
+            progress.hide()
+
+        # done with setups, report results
+        if cntSkipped != 0:
+            ui.messageBox("{} files were written. {} Setups were skipped due to error:{}".format(cntFiles, cntSkipped, lstSkipped), 
+                constCmdName, 
+                adsk.core.MessageBoxButtonTypes.OKButtonType,
+                adsk.core.MessageBoxIconTypes.WarningIconType)
+            
+        elif cntFiles == 0:
+            ui.messageBox('No CAM operations posted', 
+                constCmdName, 
+                adsk.core.MessageBoxButtonTypes.OKButtonType,
+                adsk.core.MessageBoxIconTypes.WarningIconType)
+
+    except:
+        if progress:
+            progress.hide()
+        if ui:
+            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+def NormalizeMqttTelemetry(text, jobBasename):
+    """Rewrite nxt / Jarvis M118 P6 tool lines after Post Process All rename/combine.
+
+    Fusion is invoked with temp name ``8910`` when splitSetup is on (Personal Use).
+    Each op therefore emits ``job_file`` as ``8910.gcode`` / ``job.gcode`` and
+    ``event:start``. After ops are merged into ``{setupName}.gcode``, fix:
+      - job_file → final NC basename (e.g. ``01 Putter - 3 axis - Op1.gcode``)
+      - first tool M118 → event start; later ones → change
+    """
+    if not text or "M118 P6" not in text or 'T"duet/' not in text:
+        return text
+    job = str(jobBasename).replace('"', "").replace("\n", "").replace("\r", "")
+    if not job:
+        return text
+    n = 0
+    out = []
+    for line in text.splitlines(True):
+        if "M118 P6" in line and 'T"duet/' in line and "/tool\"" in line:
+            event = "start" if n == 0 else "change"
+            n += 1
+            line = re.sub(
+                r'event"":""(?:start|change)""',
+                'event"":""' + event + '""',
+                line,
+                count=1,
+            )
+            if re.search(r'job_file"":""[^"]*""', line):
+                line = re.sub(
+                    r'job_file"":""[^"]*""',
+                    'job_file"":""' + job + '""',
+                    line,
+                    count=1,
+                )
+            else:
+                # Inject job_file into the JSON payload if the post omitted it
+                line = line.replace(
+                    '}"" T"',
+                    ',""job_file"":""' + job + '""}"" T"',
+                    1,
+                )
+        out.append(line)
+    return "".join(out)
+
+
+def ApplyMqttTelemetryToFile(path, jobBasename):
+    """Normalize MQTT lines in a finished NC file.
+
+    Tries a few path variants (Fusion/Windows separators). Preserves CRLF if
+    the source used it. Silent on missing/unreadable files.
+    """
+    candidates = [path]
+    if path:
+        alt = path.replace("/", "\\")
+        if alt != path:
+            candidates.append(alt)
+        # Sometimes callers pass path without extension or with doubled ext
+        if jobBasename and not path.lower().endswith(str(jobBasename).lower()):
+            folder = os.path.dirname(path)
+            if folder:
+                candidates.append(os.path.join(folder, jobBasename))
+
+    for candidate in candidates:
+        try:
+            with open(candidate, "rb") as f:
+                raw = f.read()
+        except Exception:
+            continue
+        newline = b"\r\n" if b"\r\n" in raw else b"\n"
+        text = raw.decode("utf-8", errors="replace")
+        # Normalize works on universal newlines; re-apply original newline style
+        text_u = text.replace("\r\n", "\n").replace("\r", "\n")
+        fixed_u = NormalizeMqttTelemetry(text_u, jobBasename)
+        if fixed_u == text_u:
+            return
+        out = fixed_u.replace("\n", "\r\n" if newline == b"\r\n" else "\n")
+        try:
+            with open(candidate, "wb") as f:
+                f.write(out.encode("utf-8"))
+            return
+        except Exception:
+            continue
+
+
+def PostProcessSetup(fname, setup, setupFolder, docSettings):
+    ui = None
+    fileHead = None
+    fileBody = None
+    fileOp = None
+    retVal = "Fusion 360 reported an exception"
+
+    try:
+        app = adsk.core.Application.get()
+        ui  = app.userInterface
+        doc = app.activeDocument
+        product = doc.products.itemByProductType(constCAMProductId)
+        cam = adsk.cam.CAM.cast(product)
+
+        fileExt = docSettings["fileExt"]
+        jobBasename = fname + fileExt
+
+        # Create PostProcessInput
+        opName = fname
+        opFolder = setupFolder
+        if docSettings["splitSetup"]:
+            opName = constOpTmpFile
+            opFolder = tempfile.gettempdir()
+        postInput = adsk.cam.PostProcessInput.create(opName, 
+                                                    docSettings["post"], 
+                                                    opFolder, 
+                                                    docSettings["units"])
+        postInput.isOpenInEditor = False
+
+        # Do it all at once?
+        if not docSettings["splitSetup"]:
+            try:
+                if not cam.postProcess(setup, postInput):
+                    return "Fusion 360 reported an error."
+                time.sleep(constPostLoopDelay) # files missing sometimes unless we slow down (??)
+                # Fusion may still emit temp/program-number job_file; normalize to setup name.
+                ApplyMqttTelemetryToFile(setupFolder + "/" + jobBasename, jobBasename)
+                return None
+            except Exception as exc:
+                retVal += ": " + str(exc)
+                return retVal
+
+        # Split setup into individual operations (Fusion Personal Use tool-change workaround).
+        # Each op is posted as temp ``8910`` then bodies are concatenated into ``fname``.
+        path = setupFolder + "/" + fname
+        opPath = opFolder + "/" + opName + fileExt
+        pathlib.Path(setupFolder).mkdir(parents=True, exist_ok=True)
+        fileHead = open(path + fileExt, "w")
+        fileBody = open(opFolder + "/" + constBodyTmpFile + fileExt, "w")
+        fFirst = True
+        fBlankOk = False
+        lineNum = 10
+        regToolComment = re.compile(r"M4000\s")
+        fFastZenabled = docSettings["fastZ"]
+        regBody = re.compile(r""
+            "(?P<N>N[0-9]+ *)?" # line number
+            "(?P<line>"         # line w/o number
+            "(M(?P<M>[0-9]+) *)?" # M-code
+            "(G(?P<G>[0-9]+) *)?" # G-code
+            "(T(?P<T>[0-9]+))?" # Tool
+            ".+)",              # to end of line
+            re.IGNORECASE | re.DOTALL)
+        toolChange = docSettings["toolChange"]
+        fToolChangeNum = False
+        if len(toolChange) != 0:
+            toolChange = toolChange.replace(":", "\n")
+            toolChange += "\n"
+            match = regBody.match(toolChange).groupdict()
+            if match["N"] != None:
+                fToolChangeNum = True
+                toolChange = match["line"]
+                # split into individual lines to add line numbers
+                toolChange = toolChange.splitlines(True)
+        # Parse end code list, splitting into G-codes and M-codes
+        endCodes = docSettings["endCodes"]
+        endGcodes = re.findall("G([0-9]+)", endCodes)
+        endGcodeSet = set()
+        for code in endGcodes:
+            endGcodeSet.add(int(code))
+        endMcodes = re.findall("M([0-9]+)", endCodes)
+        endMcodeSet = set()
+        for code in endMcodes:
+            endMcodeSet.add(int(code))
+
+        if fFastZenabled:
+            regParseLine = re.compile(r""
+                "(G(?P<G>[0-9]+(\.[0-9]*)?)[^XYZF]*)?"
+                "(?P<XY>((X-?[0-9]+(\.[0-9]*)?)[^XYZF]*)?"
+                "((Y-?[0-9]+(\.[0-9]*)?)[^XYZF]*)?)"
+                "(Z(?P<Z>-?[0-9]+(\.[0-9]*)?)[^XYZF]*)?"
+                "(F(?P<F>-?[0-9]+(\.[0-9]*)?)[^XYZF]*)?",
+                re.IGNORECASE)
+            regGcodes = re.compile(r"G([0-9]+(?:\.[0-9]*)?)")
+
+        i = 0
+        ops = setup.allOperations
+        while i < ops.count:
+            op = ops[i]
+            i += 1
+            if op.isSuppressed:
+                continue
+
+            # Look ahead for operations without a toolpath. This can happen
+            # with a manual operation. Group it with current operation.
+            # Or if first, group it with subsequent ones.
+            opHasTool = None
+            hasTool = op.hasToolpath
+            if hasTool:
+                opHasTool = op
+            opList = adsk.core.ObjectCollection.create()
+            opList.add(op)
+            while i < ops.count:
+                op = ops[i]
+                if op.isSuppressed:
+                    i += 1
+                    continue
+                if op.hasToolpath:
+                    if not hasTool:
+                        opList.add(op)
+                        opHasTool = op
+                        i += 1
+                    break
+                opList.add(op)
+                i += 1
+
+            retries = docSettings["postRetries"]
+            delay = docSettings["initialDelay"]
+            while True:
+                try:
+                    if not cam.postProcess(opList, postInput):
+                        retVal = "Fusion 360 reported an error processing operation"
+                        if (opHasTool != None):
+                            retVal += ": " +  opHasTool.name
+                        return retVal
+                except Exception as exc:
+                    if (opHasTool != None):
+                        retVal += " in operation " +  opHasTool.name
+                    retVal += ": " + str(exc)
+                    return retVal
+
+                time.sleep(delay) # wait for it to finish (??)
+                try:
+                    fileOp = open(opPath, encoding="utf8", errors='replace')
+                    break
+                except:
+                    delay *= 2
+                    retries -= 1
+                    if retries > 0:
+                        continue
+                    # Maybe the file name extension is wrong
+                    for file in os.listdir(opFolder):
+                        if file.startswith(opName):
+                            ext = file[len(opName):]
+                            if ext != fileExt:
+                                ui.messageBox("Unable to open output file. "
+                                    "Found the file with extension '{}' instead "
+                                    "of '{}'. Make sure you have the correct file "
+                                    "extension set in the Post Process All "
+                                    "dialog.".format(ext, fileExt))
+                            break
+                    return "Unable to open " + opPath
+            
+            # Parse the gcode. We expect a header like this:
+            #
+            # % <optional>
+            # (<comments>) <0 or more lines>
+            # (<Txx tool comment>) <optional>
+            # <comments or G-code initialization, up to Txx>
+            #
+            # This header is stripped from all files after the first,
+            # except the tool comment is put in a list at the top.
+            # The header ends when we find the body, which starts with:
+            #
+            # Txx ...   (optionally preceded by line number Nxx)
+            #
+            # We copy all the body, looking for the tail. The start
+            # of the tail is denoted by any of a list of G-codes
+            # entered by the user. The defaults are:
+            # M30 - end program
+            # M5 - stop spindle
+            # M9 - stop coolant
+            # The tail is stripped until the last operation is done.
+
+            # Space between operations
+            if not fFirst and fBlankOk:
+                fileBody.write("\n")
+
+            # % at start only
+            line = fileOp.readline()
+            if line[0] == "%":
+                if fFirst:
+                    fileHead.write(line)
+                line = fileOp.readline()
+
+            # check for initial comments and tool
+            # send it to header
+            while line[0] == "M" or line[0] == "(" or line[0] == "O" or line[0] == "\n":
+                if line[0] == "\n":
+                    fBlankOk = True
+                if regToolComment.match(line) != None:
+                    fileHead.write(line)
+                    line = fileOp.readline()
+                    break
+
+                # Non-first ops: drop MQTT preamble comments (M586 lives only in first header).
+                # Keep tool MQTT publishes — those appear after Txx in the body.
+                if (not fFirst) and line[0] == "(" and "MQTT:" in line:
+                    line = fileOp.readline()
+                    if len(line) == 0:
+                        break
+                    continue
+
+                if fFirst:
+                    pos = line.upper().find(opName.upper())
+                    if pos != -1:
+                        pos += len(opName)
+                        if docSettings["numericName"]:
+                            fill = "0" * (pos - len(fname) - 1)
+                        else:
+                            fill = ""
+                        line = line[0] + fill + fname + line[pos:]    # correct file name
+                    fileHead.write(line)
+                line = fileOp.readline()
+
+            # Body starts at tool code, T
+            fBody = False
+            while True:
+                match = regBody.match(line).groupdict()
+                line = match["line"]        # filter off line number if present
+                fNum = match["N"] != None
+                if (fBody):
+                    break
+                toolCur = match["T"]
+                if (toolCur != None):
+                    toolCur = int(toolCur)
+                    if not fFirst:
+                        # Is this a tool change?
+                        if toolCur != toolLast:
+                            if len(toolChange) != 0:
+                                if fToolChangeNum:
+                                    # Add line number to tool change
+                                    for code in toolChange:
+                                        fileBody.write("N" + str(lineNum) + " " + code)
+                                        lineNum += constLineNumInc
+                                else:
+                                    fileBody.write(toolChange)
+                        else:
+                            fBody = True
+                            line = fileOp.readline()
+                            continue    # don't output tool line
+                    toolLast = toolCur
+                    break
+
+                if fFirst or line[0] == "(":
+                    if (fNum):
+                        fileBody.write("N" + str(lineNum) + " ")
+                        lineNum += constLineNumInc
+                    fileBody.write(line)
+                line = fileOp.readline()
+                if len(line) == 0:
+                    return "Tool change G-code (Txx) not found; this post processor is not compatible with Post Process All."
+                if line[0] == "\n":
+                    fBlankOk = True
+
+            # We're done with the head, move on to the body
+            # Initialize rapid move optimizations
+            fFastZ = fFastZenabled
+            Gcode = None
+            Zcur = None
+            Zfeed = None
+            fZfeedNotSet = True
+            feedCur = 0
+            fNeedFeed = False
+            fLockSpeed = False
+
+            # Note that match, line, and fNum are already set
+            while True:
+                # End of program marker?
+                endMark = match["M"]
+                if endMark != None:
+                    endMark = int(endMark)
+                    if endMark in endMcodeSet:
+                        break
+                    # When M49/M48 is used to turn off speed changes, disable fast moves as well
+                    if endMark == 49:
+                        fLockSpeed = True
+                    elif endMark == 48:
+                        fLockSpeed = False
+                endMark = match["G"]
+                if endMark != None:
+                    endMark = int(endMark)
+                    if endMark in endGcodeSet:
+                        break
+
+                if fFastZ:
+                    # Analyze code for chances to make rapid moves
+                    match = regParseLine.match(line)
+                    if match.end() != 0:
+                        try:
+                            match = match.groupdict()
+                            Gcodes = regGcodes.findall(line)
+                            fNoMotionGcode = True
+                            fHomeGcode = False
+                            for GcodeTmp in Gcodes:
+                                GcodeTmp = int(float(GcodeTmp))
+                                if GcodeTmp in constHomeGcodeSet:
+                                    fHomeGcode = True
+                                    break
+
+                                if GcodeTmp in constMotionGcodeSet:
+                                    fNoMotionGcode = False
+                                    Gcode = GcodeTmp
+                                    if Gcode == 0:
+                                        fNeedFeed = False
+                                    break
+
+                            if not fHomeGcode:
+                                Ztmp = match["Z"]
+                                if Ztmp != None:
+                                    Zlast = Zcur
+                                    Zcur = float(Ztmp)
+
+                                feedTmp = match["F"]
+                                if feedTmp != None:
+                                    feedCur = float(feedTmp)
+
+                                XYcur = match["XY"].rstrip("\n ")
+
+                                if (Zfeed == None or fZfeedNotSet) and (Gcode == 0 or Gcode == 1) and Ztmp != None and len(XYcur) == 0:
+                                    # Figure out Z feed
+                                    if (Zfeed != None):
+                                        fZfeedNotSet = False
+                                    Zfeed = Zcur
+                                    if Gcode != 0:
+                                        # Replace line with rapid move
+                                        line = constRapidZgcode.format(Zcur, line[:-1])
+                                        fNeedFeed = True
+                                        Gcode = 0
+
+                                if Gcode == 1 and not fLockSpeed:
+                                    if Ztmp != None:
+                                        if len(XYcur) == 0 and (Zcur >= Zlast or Zcur >= Zfeed or feedCur == 0):
+                                            # Upward move, above feed height, or anomalous feed rate.
+                                            # Replace with rapid move
+                                            line = constRapidZgcode.format(Zcur, line[:-1])
+                                            fNeedFeed = True
+                                            Gcode = 0
+
+                                    elif Zcur >= Zfeed:
+                                        # No Z move, at/above feed height
+                                        line = constRapidXYgcode.format(XYcur, line[:-1])
+                                        fNeedFeed = True
+                                        Gcode = 0
+
+                                elif fNeedFeed and fNoMotionGcode:
+                                    # No G-code present, changing to G1
+                                    if Ztmp != None:
+                                        if len(XYcur) != 0:
+                                            # Not Z move only - back to G1
+                                            line = constFeedXYZgcode.format(XYcur, Zcur, feedCur, line[:-1])
+                                            fNeedFeed = False
+                                            Gcode = 1
+                                        elif Zcur < Zfeed and Zcur <= Zlast:
+                                            # Not up nor above feed height - back to G1
+                                            line = constFeedZgcode.format(Zcur, feedCur, line[:-1])
+                                            fNeedFeed = False
+                                            Gcode = 1
+                                            
+                                    elif len(XYcur) != 0 and Zcur < Zfeed:
+                                        # No Z move, below feed height - back to G1
+                                        line = constFeedXYgcode.format(XYcur, feedCur, line[:-1])
+                                        fNeedFeed = False
+                                        Gcode = 1
+
+                                if (Gcode != 0 and fNeedFeed):
+                                    if (feedTmp == None):
+                                        # Feed rate not present, add it
+                                        line = line[:-1] + constAddFeedGcode.format(feedCur)
+                                    fNeedFeed = False
+
+                                if Zcur != None and Zfeed != None and Zcur >= Zfeed and Gcode != None and \
+                                    Gcode != 0 and len(XYcur) != 0 and (Ztmp != None or Gcode != 1):
+                                    # We're at or above the feed height, but made a cutting move.
+                                    # Feed height is wrong, bring it up
+                                    Zfeed = Zcur + 0.001
+                        except:
+                            fFastZ = False # Just skip changes
+
+                # copy line to output
+                if (fNum):
+                    fileBody.write("N" + str(lineNum) + " ")
+                    lineNum += constLineNumInc
+                fileBody.write(line)
+                lineFull = fileOp.readline()
+                if len(lineFull) == 0:
+                    break
+                match = regBody.match(lineFull).groupdict()
+                line = match["line"]        # filter off line number if present
+                fNum = match["N"] != None
+
+            # Found tail of program
+            if fFirst:
+                tailGcode = lineFull + fileOp.read()
+            fFirst = False
+            fileOp.close()
+            os.remove(fileOp.name)
+            fileOp = None
+
+        # Completed all operations, add tail
+        # Update line numbers if present
+        if len(tailGcode) != 0:
+            tailGcode = tailGcode.splitlines(True)
+            for code in tailGcode:
+                match = regBody.match(code).groupdict()
+                if match["N"] != None:
+                    fileBody.write("N" + str(lineNum) + " " + match["line"])
+                    lineNum += constLineNumInc
+                else:
+                    fileBody.write(code)
+
+        # Copy body to head
+        fileBody.close()
+        fileBody = open(fileBody.name)  # open for reading
+        # copy in chunks
+        while True:
+            block = fileBody.read(10240)
+            if len(block) == 0:
+                break
+            fileHead.write(block)
+            block = None    # free memory
+        fileBody.close()
+        os.remove(fileBody.name)
+        fileBody = None
+        fileHead.close()
+        fileHead = None
+
+        # Temp posts used ``8910``; rewrite MQTT job_file + start/change for the setup file.
+        ApplyMqttTelemetryToFile(path + fileExt, jobBasename)
+
+        return None
+
+    except:
+        if fileHead:
+            try:
+                fileHead.close()
+                os.remove(fileHead.name)
+            except:
+                pass
+
+        if fileBody:
+            try:
+                fileBody.close()
+                os.remove(fileBody.name)
+            except:
+                pass
+
+        if fileOp:
+            try:
+                fileOp.close()
+                os.remove(fileOp.name)
+            except:
+                pass
+
+        if ui:
+            retVal += " " + traceback.format_exc()
+
+        return retVal
