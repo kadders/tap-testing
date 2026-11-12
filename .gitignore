@@ -40,7 +40,9 @@ Thumbs.db
 example_output/
 reference/
 data/
-scripts/
+# Ignore scripts/ contents except shell helpers (LF-enforced via .gitattributes)
+scripts/*
+!scripts/*.sh
 
 # Local / secrets
 .env

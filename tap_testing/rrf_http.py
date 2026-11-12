@@ -45,6 +45,17 @@ _JOB_ACTIVE_STATUSES = frozenset(
     }
 )
 
+# Status values that mean the file job is finished (not paused mid-print).
+_JOB_TERMINAL_STATUSES = frozenset(
+    {
+        "idle",
+        "completed",
+        "halted",
+        "off",
+        "shutdown",
+    }
+)
+
 
 def rrf_default_poll_interval_s() -> float:
     return float(os.environ.get("TAP_RRF_POLL_S", "1.0"))
@@ -74,6 +85,54 @@ def infer_print_job_active(state: dict[str, Any] | None, job: dict[str, Any] | N
     if st == "starting" and _job_has_file(job):
         return True
     return False
+
+
+def infer_job_sync_recording_active(
+    state: dict[str, Any] | None,
+    job: dict[str, Any] | None,
+) -> bool:
+    """True while a print/sim job is active (same as ``infer_print_job_active``).
+
+    ``job.file`` is enrichment only — missing file does not end recording while
+    RRF still reports an active print/simulate status. Prefer
+    ``infer_print_job_active`` at call sites; this helper remains for older tests.
+    """
+    del job  # retained for API compatibility; file is not a gate
+    if not state:
+        return False
+    st = state.get("status")
+    if isinstance(st, str) and st in _JOB_TERMINAL_STATUSES:
+        return False
+    return infer_print_job_active(state, None)
+
+
+def infer_job_sync_stop_reason(
+    state: dict[str, Any] | None,
+    job: dict[str, Any] | None,
+) -> str:
+    """Label for why job-sync decided recording should end (not a gate itself)."""
+    st = (state or {}).get("status") if state else None
+    if st == "completed":
+        return "job_completed"
+    if st == "halted":
+        return "rrf_halted"
+    if st in ("off", "shutdown"):
+        return "rrf_shutdown"
+    # idle / missing status with no file — diagnostic label only after inactive edge
+    if st in (None, "idle") and not _job_has_file(job):
+        return "job_no_file"
+    return "job_sync_inactive"
+
+
+def is_sbc_mode(sbc: Any) -> bool:
+    """
+    True when RRF object model reports SBC / DSF mode.
+
+    In Duet Web Control and the object model, ``sbc`` is non-null only when the
+    board is paired with an SBC running Duet Software Framework (not standalone
+    WiFi/Ethernet Duet HTTP).
+    """
+    return isinstance(sbc, dict) and bool(sbc)
 
 
 def _job_has_file(job: dict[str, Any] | None) -> bool:
@@ -159,6 +218,73 @@ class RrfClient:
         job = job_raw if isinstance(job_raw, dict) else None
         return state, job
 
+    def fetch_tools(self) -> list[dict[str, Any]]:
+        """Return the ``tools`` object-model array (may be empty)."""
+        raw = self.model("tools", "v")
+        if isinstance(raw, list):
+            return [t for t in raw if isinstance(t, dict)]
+        return []
+
+    def fetch_axis_letters(self) -> list[str]:
+        """
+        Return move.axes letter order (e.g. ``["X","Y","Z"]``).
+
+        RRF ``tools[n].offsets[]`` is indexed in this same order.
+        """
+        raw = self.model("move.axes", "v")
+        if not isinstance(raw, list):
+            return []
+        letters: list[str] = []
+        for ax in raw:
+            if not isinstance(ax, dict):
+                continue
+            letter = ax.get("letter")
+            if isinstance(letter, str) and letter.strip():
+                letters.append(letter.strip().upper())
+            else:
+                letters.append(f"A{len(letters)}")
+        return letters
+
+    def fetch_sbc(self) -> dict[str, Any] | None:
+        """Return the ``sbc`` object-model subtree, or None when not in SBC mode / missing."""
+        raw = self.model("sbc", "v")
+        if isinstance(raw, dict):
+            return raw
+        return None
+
+    def fetch_globals(self) -> dict[str, Any]:
+        """Return user globals (``rr_model`` key ``global``) as a name → value dict."""
+        raw = self.model("global", "v")
+        return normalize_rrf_globals(raw)
+
+    def fetch_spindles(self) -> list[dict[str, Any]]:
+        """Return the ``spindles`` object-model array (may be empty)."""
+        raw = self.model("spindles", "v")
+        if isinstance(raw, list):
+            return [s if isinstance(s, dict) else {} for s in raw]
+        return []
+
+    def fetch_move(self) -> dict[str, Any] | None:
+        """Return the ``move`` object-model subtree, or None if missing."""
+        raw = self.model("move", "v")
+        return raw if isinstance(raw, dict) else None
+
+    def fetch_current_move(self) -> dict[str, Any] | None:
+        """
+        Return ``move.currentMove`` (requestedSpeed / topSpeed in mm/s).
+
+        Falls back to the ``move`` subtree if the narrow key is empty.
+        """
+        raw = self.model("move.currentMove", "v")
+        if isinstance(raw, dict) and raw:
+            return raw
+        move = self.fetch_move()
+        if isinstance(move, dict):
+            cm = move.get("currentMove")
+            if isinstance(cm, dict) and cm:
+                return cm
+        return None
+
     def send_gcode(self, line: str) -> dict[str, Any]:
         """Queue G/M/T-code via ``/rr_gcode`` (RRF OpenAPI). May move axes or run the spindle; use with care.
 
@@ -169,6 +295,331 @@ class RrfClient:
             raise RrfHttpError("rr_gcode: expected JSON object")
         return data
 
+    def download_file(self, name: str, *, max_bytes: int = 8 * 1024 * 1024) -> bytes:
+        """
+        Download a file via ``GET /rr_download?name=…`` (read-only).
+
+        Used to hash/summarize the running G-code for Jarvis CAM resolution.
+        Bytes are not persisted by callers — compute digest/summary then discard.
+        """
+        if not name or not str(name).strip():
+            raise RrfHttpError("rr_download: empty name")
+        qs = urllib.parse.urlencode({"name": str(name)})
+        url = f"{self.base_url}/rr_download?{qs}"
+        req = urllib.request.Request(url, method="GET")
+        try:
+            with self._opener.open(req, timeout=self.timeout_s) as resp:
+                chunks: list[bytes] = []
+                total = 0
+                while True:
+                    block = resp.read(64 * 1024)
+                    if not block:
+                        break
+                    total += len(block)
+                    if total > max_bytes:
+                        raise RrfHttpError(f"rr_download: file exceeds {max_bytes} bytes")
+                    chunks.append(block)
+                return b"".join(chunks)
+        except urllib.error.HTTPError as e:
+            raise RrfHttpError(f"HTTP {e.code} for /rr_download") from e
+        except urllib.error.URLError as e:
+            raise RrfHttpError(str(e.reason if hasattr(e, "reason") else e)) from e
+        except socket.timeout as e:
+            raise RrfHttpError("timeout") from e
+
+
+def parse_current_tool(state: dict[str, Any] | None) -> int | None:
+    """
+    Selected tool number from ``state.currentTool``.
+
+    RRF uses ``-1`` when no tool is selected. Returns ``None`` if missing/invalid.
+    """
+    if not state:
+        return None
+    raw = state.get("currentTool")
+    if raw is None:
+        return None
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return n
+
+
+def parse_job_file_name(job: dict[str, Any] | None) -> str | None:
+    """Best-effort G-code filename from ``job.file.fileName`` or ``job.fileName``."""
+    if not job:
+        return None
+    f = job.get("file")
+    if isinstance(f, dict):
+        fn = f.get("fileName")
+        if isinstance(fn, str) and fn.strip():
+            return fn.strip()
+    fn2 = job.get("fileName")
+    if isinstance(fn2, str) and fn2.strip():
+        return fn2.strip()
+    return None
+
+
+def parse_job_file_position(job: dict[str, Any] | None) -> int | None:
+    """Byte offset into the running G-code file (``job.filePosition``), if present."""
+    if not job:
+        return None
+    raw = job.get("filePosition")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_finite_float(raw: Any) -> float | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if v != v or v in (float("inf"), float("-inf")):  # NaN / inf
+        return None
+    return v
+
+
+def parse_job_duration_s(job: dict[str, Any] | None) -> float | None:
+    """Elapsed job time in seconds from ``job.duration``, if present."""
+    if not job:
+        return None
+    return _as_finite_float(job.get("duration"))
+
+
+def parse_job_times_left_s(job: dict[str, Any] | None) -> float | None:
+    """Estimated remaining seconds from ``job.timesLeft.file``, if present and finite."""
+    if not job:
+        return None
+    left = job.get("timesLeft")
+    if not isinstance(left, dict):
+        return None
+    return _as_finite_float(left.get("file"))
+
+
+def parse_requested_feed_mm_min(move: dict[str, Any] | None) -> float | None:
+    """
+    Current requested feed in mm/min.
+
+    RRF ``move.currentMove.requestedSpeed`` is mm/s. Accepts either a currentMove
+    dict or a full ``move`` object. Returns None when missing or speed is 0.
+    """
+    if not move:
+        return None
+    cm = move.get("currentMove") if "currentMove" in move else move
+    if not isinstance(cm, dict):
+        return None
+    mm_s = _as_finite_float(cm.get("requestedSpeed"))
+    if mm_s is None or mm_s <= 0:
+        return None
+    return mm_s * 60.0
+
+
+def parse_axis_positions_mm(move_or_axes: dict[str, Any] | list[Any] | None) -> dict[str, float]:
+    """
+    Named axis positions from ``move.axes``.
+
+    Prefers ``userPosition`` (work coordinates, what DWC shows) and falls back
+    to ``machinePosition``. Omits axes with no finite position. Letter order
+    follows the object-model array.
+    """
+    axes: list[Any] | None = None
+    if isinstance(move_or_axes, list):
+        axes = move_or_axes
+    elif isinstance(move_or_axes, dict):
+        raw = move_or_axes.get("axes")
+        if isinstance(raw, list):
+            axes = raw
+    if not axes:
+        return {}
+    out: dict[str, float] = {}
+    for i, ax in enumerate(axes):
+        if not isinstance(ax, dict):
+            continue
+        letter = ax.get("letter")
+        if isinstance(letter, str) and letter.strip():
+            key = letter.strip().upper()
+        else:
+            key = f"A{i}"
+        pos = ax.get("userPosition")
+        if pos is None:
+            pos = ax.get("machinePosition")
+        val = _as_finite_float(pos)
+        if val is None:
+            continue
+        out[key] = val
+    return out
+
+
+def summarize_tool(tool: dict[str, Any]) -> dict[str, Any]:
+    """Compact RRF tool row for snapshots / MQTT (Fusion GUIDs are not in RRF)."""
+    out: dict[str, Any] = {}
+    for key in (
+        "number",
+        "name",
+        "state",
+        "spindle",
+        "spindleRpm",
+        "offsets",
+        "offsetsProbed",
+        "axes",
+        "extruders",
+        "heaters",
+        "fans",
+        "active",
+        "standby",
+    ):
+        if key in tool:
+            out[key] = tool[key]
+    return out
+
+
+def summarize_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [summarize_tool(t) for t in tools]
+
+
+def named_offsets_mm(
+    offsets: Any,
+    axis_letters: list[str] | None = None,
+) -> dict[str, float]:
+    """Map RRF offsets[] to axis-letter keys using move.axes order."""
+    if not isinstance(offsets, list):
+        return {}
+    letters = list(axis_letters or [])
+    out: dict[str, float] = {}
+    for i, raw in enumerate(offsets):
+        if raw is None:
+            continue
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            continue
+        key = letters[i] if i < len(letters) else ("XYZ"[i] if i < 3 else f"A{i}")
+        out[str(key).upper()] = val
+    return out
+
+
+def normalize_tool_snapshot(
+    tool: dict[str, Any] | None,
+    *,
+    axis_letters: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """
+    Normalize one RRF tool into a stable nested snapshot for MQTT / JSONL.
+
+    Includes named axis offsets (mm). Fusion GUID is resolved later in Jarvis.
+    """
+    if not isinstance(tool, dict):
+        return None
+    compact = summarize_tool(tool)
+    number = compact.get("number")
+    try:
+        number_i = int(number) if number is not None else None
+    except (TypeError, ValueError):
+        number_i = None
+    offsets = compact.get("offsets")
+    named = named_offsets_mm(offsets, axis_letters)
+    offsets_probed = compact.get("offsetsProbed")
+    try:
+        offsets_probed_i = int(offsets_probed) if offsets_probed is not None else None
+    except (TypeError, ValueError):
+        offsets_probed_i = None
+    name = compact.get("name")
+    return {
+        "number": number_i,
+        "name": str(name).strip() if isinstance(name, str) and name.strip() else None,
+        "state": compact.get("state"),
+        "spindle": compact.get("spindle"),
+        "spindle_rpm": compact.get("spindleRpm"),
+        "axes": compact.get("axes"),
+        "axis_letters": list(axis_letters or []),
+        "offsets_mm": named,
+        "offsets": list(offsets) if isinstance(offsets, list) else offsets,
+        "offsets_probed": offsets_probed_i,
+        "extruders": compact.get("extruders"),
+        "heaters": compact.get("heaters"),
+        "fans": compact.get("fans"),
+        "active": compact.get("active"),
+        "standby": compact.get("standby"),
+        "rrf": {
+            "model_key": "tools",
+            "flags": "v",
+            "raw_tool": compact,
+        },
+    }
+
+
+def tool_snapshot_by_number(
+    tools: list[dict[str, Any]] | None,
+    number: int | None,
+    *,
+    axis_letters: list[str] | None = None,
+) -> dict[str, Any] | None:
+    if number is None or not tools:
+        return None
+    for t in tools:
+        try:
+            if int(t.get("number")) == int(number):
+                return normalize_tool_snapshot(t, axis_letters=axis_letters)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def offsets_equal(a: dict[str, float] | None, b: dict[str, float] | None) -> bool:
+    aa = a or {}
+    bb = b or {}
+    if set(aa) != set(bb):
+        return False
+    for k, v in aa.items():
+        if abs(float(v) - float(bb[k])) > 1e-6:
+            return False
+    return True
+
+
+def normalize_rrf_globals(raw: Any) -> dict[str, Any]:
+    """
+    Normalize ``rr_model`` ``global`` into a name → value dict.
+
+    Handles a JSON object, or a list of ``{name, value}`` pairs used by some DWC builds.
+    """
+    if isinstance(raw, dict):
+        if "name" in raw and "value" in raw and len(raw) <= 3:
+            name = raw.get("name")
+            return {str(name): raw.get("value")} if name else {}
+        return {str(k): v for k, v in raw.items()}
+    if isinstance(raw, list):
+        out: dict[str, Any] = {}
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name") or item.get("key")
+            if name is None:
+                continue
+            out[str(name)] = item.get("value") if "value" in item else item.get("val")
+        return out
+    return {}
+
+
+def offset_delta(
+    before: dict[str, float] | None,
+    after: dict[str, float] | None,
+) -> dict[str, float]:
+    aa = before or {}
+    bb = after or {}
+    keys = set(aa) | set(bb)
+    out: dict[str, float] = {}
+    for k in sorted(keys):
+        d = float(bb.get(k, 0.0)) - float(aa.get(k, 0.0))
+        if abs(d) > 1e-6:
+            out[k] = d
+    return out
 
 def probe_rrf_base(base_url: str, *, password: str = "", timeout_s: float = 3.0) -> str:
     """
@@ -180,6 +631,45 @@ def probe_rrf_base(base_url: str, *, password: str = "", timeout_s: float = 3.0)
     state, _ = client.fetch_state_and_job()
     st = (state or {}).get("status", "?")
     return f"OK — state.status={st!r}"
+
+
+def probe_rrf_sbc_mode(
+    base_url: str | None = None,
+    *,
+    password: str | None = None,
+    timeout_s: float = 3.0,
+) -> tuple[bool, dict[str, Any] | None, str]:
+    """
+    Detect RRF SBC / DSF mode via ``rr_model?key=sbc``.
+
+    Returns:
+        (is_sbc, sbc_object_or_none, human_message)
+
+    On HTTP/connect failure returns ``(False, None, reason)`` rather than raising,
+    so MQTT gating can fail closed without aborting recording.
+    """
+    base = (base_url or rrf_default_base_url()).strip()
+    pw = password if password is not None else os.environ.get("TAP_RRF_PASSWORD", "")
+    try:
+        client = RrfClient(base, password=pw, timeout_s=timeout_s)
+        client.connect()
+        sbc = client.fetch_sbc()
+    except RrfHttpError as e:
+        return False, None, f"RRF unreachable at {base}: {e}"
+    except Exception as e:
+        return False, None, f"RRF SBC probe failed at {base}: {e}"
+    if is_sbc_mode(sbc):
+        dsf = (sbc or {}).get("dsf") if isinstance(sbc, dict) else None
+        dsf_ver = dsf.get("version") if isinstance(dsf, dict) else None
+        distro = (sbc or {}).get("distribution") if isinstance(sbc, dict) else None
+        bits = []
+        if distro:
+            bits.append(str(distro))
+        if dsf_ver:
+            bits.append(f"DSF {dsf_ver}")
+        detail = ", ".join(bits) if bits else "sbc object present"
+        return True, sbc, f"SBC mode active ({detail}) via {base}"
+    return False, None, f"Standalone / non-SBC mode at {base} (rr_model.sbc is null)"
 
 
 def discover_rrf_base(

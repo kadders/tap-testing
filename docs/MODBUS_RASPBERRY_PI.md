@@ -25,13 +25,14 @@ python -m tap_testing.homing_gui --modbus --modbus-profile h100 --modbus-serial-
 During **Start recording** → **Stop recording**, the app:
 
 1. Writes **`homing.csv`** — accelerometer (unchanged).
-2. Writes **`modbus.csv`** — one row per poll with:
-   - **`t_s`** — host timestamp (seconds, wall clock).
+2. Shares one **`recording_t0_mono`** with the ADXL stream so Modbus and accel times align.
+3. Writes **`modbus.csv`** — one row per poll with:
+   - **`t_s`** — seconds since recording start (same basis as ADXL / tool events).
    - **`hr_0` … `hr_{N-1}`** — holding registers (unsigned 16-bit).
    - **`ir_0` … `ir_{N-1}`** — input registers.
    - **`di_*`**, **`co_*`** — discrete inputs / coils when enabled.
 
-Comment lines at the top of **`modbus.csv`** include **`transport`**, **`unit_id`**, optional **`profile`** (e.g. `h100`), and serial or TCP parameters.
+MQTT Modbus publishes also include wall-clock **`ts`**. Comment lines at the top of **`modbus.csv`** include **`transport`**, **`unit_id`**, **`time_basis`** (`recording_monotonic`), optional **`profile`** (e.g. `h100`), and serial or TCP parameters.
 
 If the Modbus client cannot connect, you still get ADXL data; the run directory may contain **`modbus.csv.error.txt`**.
 

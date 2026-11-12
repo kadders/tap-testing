@@ -29,6 +29,8 @@ from tap_testing.rrf_http import (
     RrfClient,
     RrfHttpError,
     infer_print_job_active,
+    is_sbc_mode,
+    normalize_rrf_globals,
     probe_rrf_base,
     rrf_discovery_hosts,
 )
@@ -81,6 +83,182 @@ def test_infer_print_job_active(
     expected: bool,
 ) -> None:
     assert infer_print_job_active(state, job) is expected
+
+
+def test_infer_job_sync_recording_active() -> None:
+    from tap_testing.rrf_http import infer_job_sync_recording_active
+
+    job = {"file": {"fileName": "0:/gcodes/part.gcode"}}
+    assert infer_job_sync_recording_active({"status": "processing"}, job) is True
+    assert infer_job_sync_recording_active({"status": "paused"}, job) is True
+    assert infer_job_sync_recording_active({"status": "completed"}, job) is False
+    assert infer_job_sync_recording_active({"status": "idle"}, job) is False
+    assert infer_job_sync_recording_active({"status": "busy"}, job) is False
+    # Missing job.file must not gate an active print/sim status
+    assert infer_job_sync_recording_active({"status": "processing"}, None) is True
+    assert infer_job_sync_recording_active({"status": "idle"}, None) is False
+
+
+def test_infer_job_sync_stop_reason() -> None:
+    from tap_testing.rrf_http import infer_job_sync_stop_reason
+
+    job = {"file": {"fileName": "0:/gcodes/part.gcode"}}
+    assert infer_job_sync_stop_reason({"status": "completed"}, job) == "job_completed"
+    assert infer_job_sync_stop_reason({"status": "idle"}, None) == "job_no_file"
+    assert infer_job_sync_stop_reason({"status": "busy"}, job) == "job_sync_inactive"
+    assert infer_job_sync_stop_reason({"status": "halted"}, job) == "rrf_halted"
+    assert infer_job_sync_stop_reason({"status": "off"}, job) == "rrf_shutdown"
+    assert infer_job_sync_stop_reason({"status": "shutdown"}, job) == "rrf_shutdown"
+    # Active print without file is not labeled job_no_file by the stop helper alone;
+    # stop only runs after infer_print_job_active goes false.
+    assert infer_job_sync_stop_reason({"status": "processing"}, None) == "job_sync_inactive"
+
+
+def test_parse_current_tool_and_job_file() -> None:
+    from tap_testing.rrf_http import (
+        parse_current_tool,
+        parse_job_file_name,
+        parse_job_file_position,
+        summarize_tool,
+    )
+
+    assert parse_current_tool({"currentTool": 4}) == 4
+    assert parse_current_tool({"currentTool": -1}) == -1
+    assert parse_job_file_name({"file": {"fileName": "x.gcode"}}) == "x.gcode"
+    assert parse_job_file_position({"filePosition": 50}) == 50
+    assert summarize_tool({"number": 1, "name": "a", "ignore": True}) == {
+        "number": 1,
+        "name": "a",
+    }
+
+
+def test_parse_job_duration_times_left_and_feed() -> None:
+    from tap_testing.rrf_http import (
+        parse_job_duration_s,
+        parse_job_times_left_s,
+        parse_requested_feed_mm_min,
+    )
+
+    assert parse_job_duration_s(None) is None
+    assert parse_job_duration_s({}) is None
+    assert parse_job_duration_s({"duration": 3862}) == 3862.0
+    assert parse_job_times_left_s(None) is None
+    assert parse_job_times_left_s({"timesLeft": {"file": 90}}) == 90.0
+    assert parse_job_times_left_s({"timesLeft": {"file": None}}) is None
+    assert parse_requested_feed_mm_min(None) is None
+    assert parse_requested_feed_mm_min({"requestedSpeed": 30}) == 1800.0
+    assert parse_requested_feed_mm_min({"currentMove": {"requestedSpeed": 25}}) == 1500.0
+    assert parse_requested_feed_mm_min({"requestedSpeed": 0}) is None
+    assert parse_requested_feed_mm_min({}) is None
+
+
+def test_parse_axis_positions_mm() -> None:
+    from tap_testing.rrf_http import parse_axis_positions_mm
+
+    assert parse_axis_positions_mm(None) == {}
+    assert parse_axis_positions_mm({}) == {}
+    axes = [
+        {"letter": "X", "userPosition": 12.345, "machinePosition": 0.0},
+        {"letter": "Y", "userPosition": -3.2},
+        {"letter": "Z", "machinePosition": 1.0},
+        {"letter": "A", "userPosition": 90},
+        {"letter": "B"},
+    ]
+    assert parse_axis_positions_mm({"axes": axes}) == {
+        "X": 12.345,
+        "Y": -3.2,
+        "Z": 1.0,
+        "A": 90.0,
+    }
+    assert parse_axis_positions_mm(axes)["A"] == 90.0
+    assert parse_axis_positions_mm([{"letter": "X", "userPosition": "nan"}]) == {}
+
+
+def test_fetch_current_move_narrow_then_fallback() -> None:
+    client = RrfClient("http://dummy")
+    calls: list[str] = []
+
+    def fake(path: str, query: dict[str, str]) -> dict:
+        if path == "/rr_connect":
+            return {"err": 0}
+        key = query.get("key", "")
+        calls.append(key)
+        if key == "move.currentMove":
+            return {"result": {}}
+        if key == "move":
+            return {"result": {"currentMove": {"requestedSpeed": 10}}}
+        raise AssertionError(f"unexpected {path} {query}")
+
+    with patch.object(client, "_request_json", side_effect=fake):
+        client.connect()
+        cm = client.fetch_current_move()
+    assert cm == {"requestedSpeed": 10}
+    assert calls == ["move.currentMove", "move"]
+
+@pytest.mark.parametrize(
+    ("sbc", "expected"),
+    [
+        (None, False),
+        ("", False),
+        ([], False),
+        ({}, False),
+        ({"distribution": "DuetPi"}, True),
+        ({"dsf": {"version": "3.5.0"}}, True),
+    ],
+)
+def test_is_sbc_mode(sbc: object, expected: bool) -> None:
+    assert is_sbc_mode(sbc) is expected
+
+
+def test_rrf_client_fetch_sbc() -> None:
+    client = RrfClient("http://dummy")
+
+    def fake(path: str, query: dict[str, str]) -> dict:
+        if path == "/rr_connect":
+            return {"err": 0}
+        if path == "/rr_model" and query.get("key") == "sbc":
+            return {"key": "sbc", "flags": "v", "result": {"distribution": "DuetPi"}}
+        raise AssertionError(f"unexpected {path} {query}")
+
+    with patch.object(client, "_request_json", side_effect=fake):
+        client.connect()
+        sbc = client.fetch_sbc()
+        assert sbc == {"distribution": "DuetPi"}
+        assert is_sbc_mode(sbc) is True
+
+
+def test_rrf_client_fetch_globals_and_spindles() -> None:
+    client = RrfClient("http://dummy")
+
+    def fake(path: str, query: dict[str, str]) -> dict:
+        if path == "/rr_connect":
+            return {"err": 0}
+        if path == "/rr_model" and query.get("key") == "global":
+            return {
+                "key": "global",
+                "flags": "v",
+                "result": {
+                    "arborctlLdd": True,
+                    "arborVFDStatus": [[True, 1, 400.0, 24000.0, True]],
+                    "h100Fc4Count": [13],
+                },
+            }
+        if path == "/rr_model" and query.get("key") == "spindles":
+            return {
+                "key": "spindles",
+                "flags": "v",
+                "result": [{"state": "forward", "active": 24000, "current": 23980}],
+            }
+        raise AssertionError(f"unexpected {path} {query}")
+
+    with patch.object(client, "_request_json", side_effect=fake):
+        client.connect()
+        g = client.fetch_globals()
+        spindles = client.fetch_spindles()
+    assert g["arborctlLdd"] is True
+    assert g["h100Fc4Count"] == [13]
+    assert spindles[0]["active"] == 24000
+    assert normalize_rrf_globals([{"name": "x", "value": 1}]) == {"x": 1}
 
 
 def test_rrf_client_connect_invalid_password() -> None:
@@ -200,3 +378,39 @@ def test_milo_local_read_only_model_poll() -> None:
             prev_status = st
         if poll_n < 3:
             time.sleep(0.3)
+
+
+@skip_if_no_live_rrf
+@pytest.mark.rrf
+def test_milo_local_arborctl_globals_read_only() -> None:
+    """Dump ArborCTL globals (status / power / FC4 count) — no G-code."""
+    client = RrfClient(_MILO_BASE, password=_RRF_PASSWORD, timeout_s=5.0)
+    try:
+        conn = client.connect()
+    except RrfHttpError as e:
+        pytest.skip(f"Duet not reachable at {_MILO_BASE}: {e}")
+    _rrf_print_response("rr_connect", conn)
+    try:
+        g = client.fetch_globals()
+    except RrfHttpError as e:
+        pytest.skip(f"rr_model key=global failed: {e}")
+    _rrf_print_response("rr_model key=global (normalized)", {
+        k: g.get(k)
+        for k in (
+            "arborctlLdd",
+            "arborctlVer",
+            "arborVFDStatus",
+            "arborVFDPower",
+            "h100Fc4Count",
+            "arborVFDCommReady",
+            "arborMotorSpec",
+        )
+        if k in g
+    })
+    assert isinstance(g, dict)
+    try:
+        spindles = client.fetch_spindles()
+    except RrfHttpError as e:
+        pytest.skip(f"rr_model key=spindles failed: {e}")
+    _rrf_print_response("rr_model key=spindles (result)", spindles)
+    assert isinstance(spindles, list)

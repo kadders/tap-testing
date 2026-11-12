@@ -203,7 +203,7 @@ def open_accelerometer(
         address: I2C address (0x53 or 0x1D). Ignored when interface=="spi".
         range_g: Full-scale range in g (2, 4, or 8).
         bus: I2C bus number when interface=="i2c" (e.g. 1, 20, 21).
-        interface: "i2c" or "spi". I2C is the standard/simple option; SPI supports higher rates.
+        interface: "i2c" or "spi". Default SPI (higher-rate headroom); I2C via TAP_ADXL345_INTERFACE=i2c.
         spi_cs_pin: BCM GPIO for SPI CS when interface=="spi" (default 8 = CE0).
 
     Returns:

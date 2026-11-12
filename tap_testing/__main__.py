@@ -29,6 +29,7 @@ Recording and analysis
   run_cycle            Run 3-tap cycle: record, combine, analyze (optional LED)
   cycle_gui            Same as run_cycle with GUI: live status + RPM chart
   homing_gui           Record ADXL during homing; optional --modbus; optional --rrf-job-sync (Duet HTTP / rr_model)
+  live_spindle_service Headless live spindle → MQTT (job-sync / always-on; systemd on SBC)
   analyze              Analyze CSV: natural frequency, RPM bands, charts (--plot, --workflow)
 
 Diagnostics and inspection

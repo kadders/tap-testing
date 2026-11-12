@@ -1,10 +1,8 @@
 # ADXL345 wiring and interface (Raspberry Pi)
 
-This project supports the ADXL345 over **I2C** or **SPI** on Raspberry Pi.
+This project supports the ADXL345 over **SPI** or **I2C** on Raspberry Pi.
 
-For most tap testing setups, use **I2C** with the standard Raspberry Pi pins (GPIO2=SDA1, GPIO3=SCL1).
-
-SPI is optional if you need higher sampling-rate headroom.
+**Default interface is SPI** (`adxl345_interface: "spi"` / `TAP_ADXL345_INTERFACE=spi`). SPI provides higher sampling-rate headroom for tap and live-spindle capture. I2C remains supported for simpler wiring via `TAP_ADXL345_INTERFACE=i2c`.
 
 ## Why SPI vs I2C
 
@@ -12,13 +10,15 @@ General SPI guidance (including Klipper):
 
 > You need to connect ADXL345 to your Raspberry Pi via **SPI**. Note that the **I2C connection, which is suggested by ADXL345 documentation, has too low throughput and will not work** [for high-rate resonance testing].
 
-For **tap testing** at typical rates (e.g. 800–1600 Hz), **I2C can work** when the bus and wiring are good. If you see I2C errors (e.g. “Remote I/O”, “No I2C device”), or want more margin for higher sample rates, use **SPI** and the wiring below.
+For **tap testing** at typical rates (e.g. 800–1600 Hz), **I2C can work** when the bus and wiring are good. This repo defaults to **SPI** so live spindle / higher rates have more margin. Override with `TAP_ADXL345_INTERFACE=i2c` if your board is I2C-only or you prefer the SDA/SCL pinout.
+
+**Sampling note:** The current SPI path **polls** `DATAX0..DATAZ1` (no ADXL FIFO / Klipper bulk MCU path yet). SPI still gives better bus headroom than I2C at the same poll rate; FIFO bulk would be a future enhancement for very high rates.
 
 **Board note:** Some ADXL345 boards are I2C-only (SDO tied to GND). For SPI, the board must support SPI mode (SDO not hardwired for I2C).
 
 ---
 
-## SPI wiring (standard Raspberry Pi SPI pins)
+## SPI wiring (default — standard Raspberry Pi SPI pins)
 
 Use SPI with the standard Raspberry Pi 40-pin header mapping.
 
@@ -32,7 +32,7 @@ Use SPI with the standard Raspberry Pi 40-pin header mapping.
 | SCL         | 23      | GPIO 11 (SPI0_SCLK)    |
 
 - Enable **SPI** in `raspi-config` → Interface Options → SPI.
-- In config, set `adxl345_interface: "spi"` and `spi_cs_pin: 8` (BCM GPIO 8 = CE0).
+- Defaults: `adxl345_interface: "spi"`, `spi_cs_pin: 8` (BCM GPIO 8 = CE0), `TAP_SPI_BUS=0`, `TAP_SPI_DEVICE=0`.
 - **ADXL345 requires SPI Mode 3** (CPOL=1, CPHA=1). To check mode on all SPI devices:
   `python -m tap_testing.check_spi_mode --all`
   To check one device: `python -m tap_testing.check_spi_mode --bus 0 --device 1`
@@ -60,7 +60,9 @@ Use these in order to confirm the accelerometer is connected and the values you 
 
 ---
 
-## I2C wiring
+## I2C wiring (optional)
+
+Set `TAP_ADXL345_INTERFACE=i2c` (or `adxl345_interface: "i2c"`).
 
 | ADXL345 pin | RPi pin | RPi pin name   |
 |-------------|---------|----------------|
@@ -71,7 +73,8 @@ Use these in order to confirm the accelerometer is connected and the values you 
 
 - Enable **I2C** in `raspi-config` → Interface Options → I2C.
 - List buses: `i2cdetect -l`. Probe with `i2cdetect -y 1` (and `-y 0`, `-y 20`, `-y 21` if you have multiple buses).
-- Default config uses I2C bus 1 and address 0x53. Use `TAP_I2C_BUS=20` (or set `i2c_bus` in config) if the device appears on another bus.
+- Default I2C bus 1 and address 0x53. Use `TAP_I2C_BUS=20` (or set `i2c_bus` in config) if the device appears on another bus.
+- Optional: `CS` high for I2C (or tie to 3.3 V); see ADXL345 datasheet for I2C vs SPI.
 
 ---
 

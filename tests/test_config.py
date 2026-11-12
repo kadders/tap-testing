@@ -15,6 +15,11 @@ class TestGetConfig:
         cfg = get_config()
         assert cfg.i2c_address == 0x53
 
+    def test_default_adxl345_interface_is_spi(self):
+        """SPI is the default; I2C remains available via TAP_ADXL345_INTERFACE=i2c."""
+        cfg = get_config()
+        assert cfg.adxl345_interface == "spi"
+
     def test_default_sample_rate(self):
         cfg = get_config()
         assert cfg.sample_rate_hz == 800.0
@@ -26,7 +31,7 @@ class TestGetConfig:
     def test_default_cycle_iterations_and_spacing(self):
         cfg = get_config()
         assert cfg.cycle_iterations == 3
-        assert cfg.cycle_spacing_s == 15.0
+        assert cfg.cycle_spacing_s == 5.0
 
     def test_default_status_led_gpio(self):
         cfg = get_config()
@@ -53,6 +58,16 @@ class TestGetConfig:
 
 class TestGetConfigEnvOverrides:
     """Env overrides (TAP_*) are read at get_config() time; use monkeypatch to avoid leaking."""
+
+    def test_adxl345_interface_i2c_from_env(self, monkeypatch):
+        monkeypatch.setenv("TAP_ADXL345_INTERFACE", "i2c")
+        cfg = get_config()
+        assert cfg.adxl345_interface == "i2c"
+
+    def test_adxl345_interface_spi_from_env(self, monkeypatch):
+        monkeypatch.setenv("TAP_ADXL345_INTERFACE", "spi")
+        cfg = get_config()
+        assert cfg.adxl345_interface == "spi"
 
     def test_spi_first_byte_data_from_env(self, monkeypatch):
         monkeypatch.setenv("TAP_SPI_FIRST_BYTE_DATA", "1")

@@ -7,23 +7,24 @@ Tap testing application for measuring tool vibrations using an accelerometer mou
 - **Hardware**: ADXL345 accelerometer + Raspberry Pi
 - **Excitation**: **Impulse** by default (hammer tap); excites many frequencies at once
 - **Use case**: Mount accelerometer on tool, tap with hammer, capture and store vibration data
-- **Stack**: Python 3, I2C (or SPI) to the ADXL345
-- Default accelerometer interface is **I2C** (standard Raspberry Pi pins). Use **SPI** only if you need higher-rate sampling.
+- **Stack**: Python 3, SPI (or I2C) to the ADXL345
+- Default accelerometer interface is **SPI** (higher-rate headroom; Klipper-style Mode 3). Use **I2C** (`TAP_ADXL345_INTERFACE=i2c`) for the simpler SDA/SCL wiring when throughput is not critical.
 
 ## Hardware
 
 - **Raspberry Pi** (3B+, 4, or 5)
-- **ADXL345** (±2g / ±4g / ±8g, I2C or SPI)
+- **ADXL345** (±2g / ±4g / ±8g, SPI or I2C)
 
 ![ADXL345 tool mounts](images/adxl345-tool-mounts.png)
-- Wiring (I2C example; default):
+- Wiring (**SPI** default; see [docs/ADXL345_WIRING.md](docs/ADXL345_WIRING.md)):
   - ADXL345 `VCC` → 3.3 V
   - ADXL345 `GND` → GND
-  - ADXL345 `SDA` → Pi GPIO 2 (SDA)
-  - ADXL345 `SCL` → Pi GPIO 3 (SCL)
-  - Optional: `CS` high for I2C (or tie to 3.3 V); see ADXL345 datasheet for I2C vs SPI
+  - ADXL345 `CS` → Pi GPIO 8 (CE0 / pin 24)
+  - ADXL345 `SDO` → Pi GPIO 9 (MISO / pin 21)
+  - ADXL345 `SDA` → Pi GPIO 10 (MOSI / pin 19)
+  - ADXL345 `SCL` → Pi GPIO 11 (SCLK / pin 23)
 
-Enable I2C on the Pi: `sudo raspi-config` → Interface Options → I2C → Enable.
+Enable SPI on the Pi: `sudo raspi-config` → Interface Options → SPI → Enable. For I2C instead, set `TAP_ADXL345_INTERFACE=i2c` and wire SDA→GPIO 2 / SCL→GPIO 3.
 
 **Status LED (optional)**  
 The ADXL345 breakout has no user-controllable LED. For the **run_cycle** script you can connect an LED (with a suitable series resistor, e.g. 330 Ω) to a Raspberry Pi GPIO pin. Default: **GPIO 17 (BCM)**. LED **ON** = recording (tap now); **OFF** = waiting between taps. On the Pi, install `RPi.GPIO` if needed: `pip install RPi.GPIO`. Use `--no-led` to run without a LED.
@@ -35,7 +36,8 @@ The ADXL345 breakout has no user-controllable LED. For the **run_cycle** script 
 ```bash
 sudo apt update
 sudo apt install -y python3-pip python3-venv python3-dev
-# Enable I2C: sudo raspi-config → Interface Options → I2C
+# Enable SPI (default ADXL path): sudo raspi-config → Interface Options → SPI
+# Optional I2C: sudo raspi-config → Interface Options → I2C, then TAP_ADXL345_INTERFACE=i2c
 ```
 
 ### Project
@@ -266,6 +268,10 @@ tap-testing/
     check_spi_mode.py    # List spidev devices and SPI mode
     verify_spi_accel.py  # Probe for ADXL345, stream samples, gravity check
     inspect_tap_data.py  # Per-file or per-cycle stats and signal check
+    mqtt_telemetry.py    # Optional MQTT publisher (TAP_MQTT_HOST → Jarvis tap_collector)
+    live_spindle_service.py  # Headless live spindle + RRF job sync + MQTT (systemd)
+    video_recording.py       # Optional ustreamer → ffmpeg session video + YouTube tee
+    spindle_telemetry.py     # ArborCTL OM → spindle JSONL + MQTT
     docs/             # Documentation helpers (no runtime logic)
       generate_example_chart.py   # Example chart images (synthetic data)
       excitation.py   # Excitation types / tap-test reference text
@@ -275,13 +281,22 @@ tap-testing/
       transducers.py  # Transducer nutshell summaries
       milling_dynamics.py  # Milling dynamics nutshell summaries
   tests/              # Pytest suite (synthetic data; no hardware)
+  PPAll/              # Fusion Post Process All add-in (MQTT job_file normalize for nxt)
   data/               # Sampling output (git-ignored): tap CSVs, data/cycle/<timestamp>/, data/live_spindle/homing/<timestamp>/
   example_output/     # Example chart output (optional, from docs.generate_example_chart)
 ```
 
 ## Data format
 
-Recorded CSVs have header `t_s, ax_g, ay_g, az_g`, a comment line `# sample_rate_hz, <value>`, then one row per sample. Analysis uses this to infer sample rate and run the FFT. Sampling output (tap CSVs, cycle runs, homing recordings) is written under `data/`. Each homing run is saved in a timestamped directory `data/live_spindle/homing/<YYYYmmdd_HHMMSS>/homing.csv` so scripts can reference the run by timestamp. The `data/` directory is git-ignored.
+Recorded CSVs have header `t_s, ax_g, ay_g, az_g`, a comment line `# sample_rate_hz, <value>`, then one row per sample. Analysis uses this to infer sample rate and run the FFT. Sampling output (tap CSVs, cycle runs, homing recordings) is written under `data/`. Each homing run is saved in a timestamped directory `data/live_spindle/homing/<YYYYmmdd_HHMMSS>/homing.csv` so scripts can reference the run by timestamp. Live-spindle jobs also write `tool-events.jsonl` and `spindle-telemetry.jsonl` beside `homing.csv`. With `TAP_VIDEO_ENABLED=1`, each job run may also include `session.mp4` and `video-meta.json` — see **[docs/VIDEO_RECORDING.md](docs/VIDEO_RECORDING.md)**. The `data/` directory is git-ignored.
+
+## Optional MQTT telemetry (Jarvis)
+
+When `TAP_MQTT_HOST` is set and `paho-mqtt` is installed, recording/analysis also publish batched accel, session events, analysis summaries, optional Modbus rows, and (during live-spindle jobs) ArborCTL spindle speed/load to Mosquitto for the Jarvis `tap_collector` service. See **[docs/MQTT_TELEMETRY.md](docs/MQTT_TELEMETRY.md)** (setup) and **[docs/MQTT_PAYLOAD_REFERENCE.md](docs/MQTT_PAYLOAD_REFERENCE.md)** (wire format).
+
+**Boot service on DuetPi / SBC:** `python -m tap_testing.live_spindle_service` (job-sync with RRF, MQTT, optional tray). Install with `sudo bash scripts/install_live_spindle_service.sh` — see **[docs/LIVE_SPINDLE_SERVICE.md](docs/LIVE_SPINDLE_SERVICE.md)**. Optional per-job video from ustreamer with telemetry overlay and YouTube Live: **[docs/VIDEO_RECORDING.md](docs/VIDEO_RECORDING.md)** (Pi ffmpeg) or **[docs/VIDEO_STREAMING.md](docs/VIDEO_STREAMING.md)** (cluster remote mode).
+
+**Fusion Post Process All:** vendored under **[PPAll/](PPAll/)** so nxt MQTT `job_file` / `event` lines are rewritten after Personal Use split/combine (avoids `8910.gcode` / all-`start` metadata in Jarvis).
 
 ## License
 

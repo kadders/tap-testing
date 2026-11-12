@@ -213,13 +213,23 @@ def build_fieldnames(cfg: ModbusLoggingConfig) -> list[str]:
 def poll_registers_once(
     client: Any,
     cfg: ModbusLoggingConfig,
+    *,
+    recording_t0_mono: float | None = None,
 ) -> dict[str, Any]:
     """
     Perform one poll cycle. Returns flat dict with t_s and register columns.
+
+    When ``recording_t0_mono`` is set, ``t_s`` is seconds since that origin
+    (same basis as ADXL / tool events). Wall-clock time is always stored as ``ts``.
     Missing/failed reads leave keys absent (caller may treat as empty when writing CSV).
     """
-    t_s = time.time()
-    row: dict[str, Any] = {"t_s": t_s}
+    wall_ts = time.time()
+    if recording_t0_mono is not None:
+        t_s = time.monotonic() - float(recording_t0_mono)
+    else:
+        # Legacy fallback (wall clock) — prefer passing recording_t0_mono
+        t_s = wall_ts
+    row: dict[str, Any] = {"t_s": t_s, "ts": wall_ts}
 
     for addr, count in _chunks(0, cfg.max_holding, cfg.chunk_size):
         try:
@@ -307,17 +317,21 @@ def run_modbus_poll_loop(
     cfg: ModbusLoggingConfig,
     on_row: Callable[[dict[str, Any]], None] | None = None,
     on_connect_fail: Callable[[str], None] | None = None,
+    *,
+    recording_t0_mono: float | None = None,
 ) -> None:
     """
     Poll until stop_event is set; append one CSV row per successful cycle.
 
-    on_row is called from this thread with the row dict (includes t_s and any keys read).
+    on_row is called from this thread with the row dict (includes t_s, ts, and registers).
+    Prefer ``recording_t0_mono`` so ``t_s`` matches ADXL recording time.
     On connect failure, writes a short error stub file and returns (no exception).
     """
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = build_fieldnames(cfg)
     interval = max(0.05, 1.0 / cfg.poll_hz) if cfg.poll_hz > 0 else 0.5
+    t0 = float(recording_t0_mono) if recording_t0_mono is not None else time.monotonic()
     client = None
     try:
         try:
@@ -340,6 +354,7 @@ def run_modbus_poll_loop(
             f.write(f"# poll_hz, {cfg.poll_hz}\n")
             f.write(f"# transport, {cfg.transport}\n")
             f.write(f"# unit_id, {cfg.unit_id}\n")
+            f.write("# time_basis, recording_monotonic\n")
             if cfg.profile:
                 f.write(f"# profile, {cfg.profile}\n")
             if cfg.transport.lower() == "tcp":
@@ -351,11 +366,11 @@ def run_modbus_poll_loop(
             f.flush()
             while not stop_event.is_set():
                 loop_t0 = time.monotonic()
-                row = poll_registers_once(client, cfg)
+                row = poll_registers_once(client, cfg, recording_t0_mono=t0)
                 out = {k: "" for k in fieldnames}
                 out["t_s"] = f"{row['t_s']:.6f}"
                 for k, v in row.items():
-                    if k == "t_s":
+                    if k in ("t_s", "ts"):
                         continue
                     if k in out:
                         out[k] = v

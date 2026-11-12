@@ -13,11 +13,14 @@ from tap_testing.analyze import (
     ToolingConfiguration,
     analyze_tap,
     analyze_tap_data,
+    chart_rpm_range,
     compute_sdof_interpretation,
     dominant_frequency,
     feed_rate_mm_min,
+    format_m593_input_shaping,
     format_milling_guidance_for_cycle,
     get_rpm_zones,
+    input_shaping_recommendation,
     load_tap_csv,
     plot_cycle_result_figure,
     plot_milling_dynamics_figure,
@@ -440,8 +443,9 @@ class TestPlotResultFigure:
         assert len(fig.axes) == 1
         ax = fig.axes[0]
         xlim = ax.get_xlim()
-        assert xlim[0] == result.min_rpm
-        assert xlim[1] == result.max_rpm
+        rpm_lo, rpm_hi = chart_rpm_range(result)
+        assert xlim[0] == rpm_lo
+        assert xlim[1] == rpm_hi
         assert ax.get_xlabel() == "Spindle speed (rpm)"
         assert out.exists()
         assert out.stat().st_size > 500  # PNG has non-trivial content
@@ -509,3 +513,18 @@ class TestPlotResultFigure:
         assert len(fig.axes) == 1
         assert out.exists()
         assert out.stat().st_size > 500
+
+
+def test_format_m593_input_shaping():
+    line = format_m593_input_shaping(40.5, damping_ratio=0.08)
+    assert line == 'M593 P"zvd" F40.50 S0.080'
+    assert format_m593_input_shaping(0.0).startswith('M593 P"none"')
+
+
+def test_input_shaping_recommendation():
+    rec = input_shaping_recommendation(920.5)
+    assert rec is not None
+    assert rec["freq_hz"] == 920.5
+    assert "F920.50" in rec["m593_gcode"]
+    assert rec["shaper_type"] == "zvd"
+    assert input_shaping_recommendation(0.0) is None

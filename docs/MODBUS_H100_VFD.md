@@ -40,7 +40,9 @@ Our CSV columns **`hr_N`**, **`ir_N`**, **`co_N`** use **0-based** Modbus PDU ad
 
 FluidNC reads **start address 0, count 2** for speed feedback:
 
-- **`ir_0`**, **`ir_1`** — related to **output frequency** and **set frequency** (see FluidNC `H100Protocol.md`: first pair / second pair in the 4-byte response). FluidNC scales with `rpm*60/10` style handling in `H100.cpp` (frequency ↔ RPM depends on pole count / nameplate; treat logged values as **raw u16** until you match your manual).
+- **`ir_0`**, **`ir_1`** — **output frequency** and **set frequency** in **deci-Hz** (FluidNC `H100Protocol.md`: first pair / second pair). Always divide by 10 to get Hz, then `RPM = 120 × Hz / poles` (2-pole 400 Hz → 24000 RPM). Do not treat a raw value `< 1000` as already-Hz.
+
+Live job telemetry should **not** poll these registers from the Pi while ArborCTL is running (one Modbus master). Use `live_spindle_service` → `tap/{device}/spindle` from ArborCTL object-model globals instead. ArborCTL’s H100 driver reads FC4 count **13** (current / voltage / power) and fills `arborVFDPower`.
 
 Example from `H100Protocol.md` (illustrative): reading two registers returns data interpreted as running vs set frequency.
 

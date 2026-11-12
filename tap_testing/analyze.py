@@ -17,6 +17,7 @@ import csv
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -772,6 +773,34 @@ def format_m593_input_shaping(
     else:
         s += " S0.1"
     return s
+
+
+def input_shaping_recommendation(
+    natural_freq_hz: float,
+    damping_ratio: float | None = None,
+    shaper_type: str = "zvd",
+) -> dict[str, Any] | None:
+    """
+    Structured RRF M593 input-shaping recommendation from tap-test natural frequency.
+
+    Returns None when natural_freq_hz is missing or non-positive (no shaper to recommend).
+    """
+    if natural_freq_hz <= 0:
+        return None
+    zeta = damping_ratio if damping_ratio is not None else 0.1
+    if not (0 < zeta < 1):
+        zeta = 0.1
+    p_type = shaper_type.lower().strip()
+    if p_type not in M593_VALID_SHAPER_TYPES:
+        p_type = "zvd"
+    return {
+        "m593_gcode": format_m593_input_shaping(
+            natural_freq_hz, damping_ratio=damping_ratio, shaper_type=p_type
+        ),
+        "shaper_type": p_type,
+        "freq_hz": float(natural_freq_hz),
+        "damping": float(zeta),
+    }
 
 
 def rpm_to_avoid(
@@ -3491,6 +3520,17 @@ def main() -> None:
     print(tool_desc)
     print(f"Avoid spindle RPM (tooth-pass resonance): {r.avoid_rpm}")
     print(f"Suggested stable RPM range: {r.suggested_rpm_min:.0f} – {r.suggested_rpm_max:.0f} RPM")
+
+    # Optional MQTT analysis publish (TAP_MQTT_HOST)
+    try:
+        from tap_testing.mqtt_telemetry import analysis_payload_from_result, try_create_publisher
+        _mqtt = try_create_publisher()
+        if _mqtt is not None:
+            _sid = str(csv_path_for_outputs.stem)
+            _mqtt.publish_analysis(analysis_payload_from_result(r, _sid, source="pi"))
+            _mqtt.close()
+    except Exception:
+        pass
 
     # M593 input shaping (RRF): reduce ringing at tap-test natural frequency
     m593_line = format_m593_input_shaping(r.natural_freq_hz, damping_ratio=None)
