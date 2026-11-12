@@ -209,6 +209,24 @@ def test_analysis_payload_from_result():
     assert payload["session_id"] == "abc"
     assert payload["fn_hz"] == 920.5
     assert payload["source"] == "pi"
+    shaping = payload.get("input_shaping")
+    assert shaping is not None
+    assert 'F920.50' in shaping["m593_gcode"]
+    assert shaping["shaper_type"] == "zvd"
+
+
+def test_analysis_payload_no_input_shaping_without_fn():
+    class R:
+        natural_freq_hz = 0.0
+        natural_freq_hz_uncertainty = None
+        avoid_rpm = []
+        suggested_rpm_min = 0.0
+        suggested_rpm_max = 0.0
+        n_teeth_used = 4
+        sample_rate_hz = 800.0
+
+    payload = analysis_payload_from_result(R(), "abc", source="pi")
+    assert "input_shaping" not in payload
 
 
 def test_tap_detected(pub_and_client):

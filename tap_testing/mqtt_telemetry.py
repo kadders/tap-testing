@@ -124,10 +124,11 @@ def analysis_payload_from_result(
     source: str = "pi",
 ) -> dict[str, Any]:
     """Build an analysis MQTT payload from a TapTestResult-like object."""
-    return {
+    fn_hz = float(getattr(result, "natural_freq_hz", 0.0))
+    payload: dict[str, Any] = {
         "session_id": session_id,
         "source": source,
-        "fn_hz": float(getattr(result, "natural_freq_hz", 0.0)),
+        "fn_hz": fn_hz,
         "fn_hz_uncertainty": getattr(result, "natural_freq_hz_uncertainty", None),
         "avoid_rpm": [float(x) for x in getattr(result, "avoid_rpm", []) or []],
         "suggested_rpm_min": float(getattr(result, "suggested_rpm_min", 0.0)),
@@ -136,6 +137,15 @@ def analysis_payload_from_result(
         "sample_rate_hz": float(getattr(result, "sample_rate_hz", 0.0)),
         "ts": time.time(),
     }
+    try:
+        from .analyze import input_shaping_recommendation
+
+        shaping = input_shaping_recommendation(fn_hz, damping_ratio=None)
+        if shaping is not None:
+            payload["input_shaping"] = shaping
+    except Exception:
+        pass
+    return payload
 
 
 @dataclass
@@ -351,16 +361,16 @@ class MqttTelemetryPublisher:
         if extra:
             payload.update(extra)
         self._publish("session", payload, qos=1)
-        self._publish_status(
-            "idle",
-            {
-                "session_id": sid,
-                "mode": mode,
-                "n_batches": payload["n_batches"],
-                "tool_number": tool_number,
-                "job_file": job,
-            },
-        )
+        status_body: dict[str, Any] = {
+            "session_id": sid,
+            "mode": mode,
+            "n_batches": payload["n_batches"],
+            "tool_number": tool_number,
+            "job_file": job,
+        }
+        if extra and extra.get("stop_reason"):
+            status_body["stop_reason"] = extra["stop_reason"]
+        self._publish_status("idle", status_body)
 
     def publish_tap_detected(self, t_s: float) -> None:
         sid = self._session_id
@@ -432,6 +442,37 @@ class MqttTelemetryPublisher:
         if "ts" not in payload:
             payload = {**payload, "ts": time.time()}
         self._publish("analysis", payload, qos=1)
+
+    def publish_video_overlay(
+        self,
+        *,
+        text: str,
+        session_id: str | None = None,
+        t_s: float | None = None,
+    ) -> None:
+        """Publish pre-rendered HUD text for cluster tap-stream (QoS 0)."""
+        body: dict[str, Any] = {
+            "text": text,
+            "ts": time.time(),
+        }
+        sid = session_id or self._session_id
+        if sid:
+            body["session_id"] = sid
+        if t_s is not None:
+            body["t_s"] = float(t_s)
+        self._publish("video_overlay", body, qos=0)
+
+    def publish_motion_sample(self, sample: dict[str, Any]) -> None:
+        """Publish structured machine motion on ``tap/{device}/motion`` (QoS 0)."""
+        sid = self._session_id
+        if sid is None:
+            return
+        body = dict(sample)
+        body.setdefault("session_id", sid)
+        body.setdefault("device_id", self.config.device_id)
+        if "ts" not in body:
+            body["ts"] = time.time()
+        self._publish("motion", body, qos=0)
 
     def publish_modbus_row(self, t_s: float, registers: dict[str, Any]) -> None:
         sid = self._session_id
